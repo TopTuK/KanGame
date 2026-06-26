@@ -14,7 +14,7 @@
           <div class="text-center mb-8">
             <div class="text-slate-400 text-sm uppercase tracking-wider mb-1">{{ t('score.totalRevenue') }}</div>
             <div class="text-6xl font-extrabold font-mono text-emerald-400 mb-2">
-              ${{ store.game?.total_revenue.toLocaleString() }}
+              {{ fmtRub(store.game?.total_revenue) }}
             </div>
             <div :class="['text-xl font-bold', rankColor]">{{ rank }}</div>
           </div>
@@ -44,12 +44,12 @@
                 :key="m.day"
                 class="flex-1 bg-emerald-500/70 rounded-t hover:bg-emerald-400 transition-colors"
                 :style="{ height: (m.daily_revenue / maxRevenue * 100) + '%' }"
-                :title="t('score.dayTooltip', { day: m.day, amount: m.daily_revenue })"
+                :title="t('score.dayTooltip', { day: m.day, amount: fmtRub(m.daily_revenue) })"
               ></div>
             </div>
             <div class="flex justify-between text-xs text-slate-600 mt-1">
-              <span>{{ t('score.day1') }}</span>
-              <span>{{ t('score.day21') }}</span>
+              <span>{{ t('score.day9') }}</span>
+              <span>{{ t('score.day35') }}</span>
             </div>
           </div>
 
@@ -81,8 +81,14 @@ const router = useRouter()
 const metrics = computed(() => store.game?.metrics || [])
 const cards = computed(() => store.game?.cards || [])
 
-const deployedCount = computed(() => cards.value.filter(c => c.column === 'deployed').length)
-const totalWip = computed(() => cards.value.filter(c => ['analysis', 'development', 'test'].includes(c.column)).length)
+const deployedCount = computed(() =>
+  cards.value.filter(c => ['deployed', 'exp_deployed'].includes(c.column)).length
+)
+const totalWip = computed(() =>
+  cards.value.filter(c =>
+    ['analysis', 'analysis_done', 'development', 'dev_done', 'test'].includes(c.column)
+  ).length
+)
 const avgThroughput = computed(() => {
   if (!metrics.value.length) return 0
   const total = metrics.value.reduce((s, m) => s + m.throughput, 0)
@@ -92,21 +98,25 @@ const maxRevenue = computed(() => Math.max(1, ...metrics.value.map(m => m.daily_
 
 const rank = computed(() => {
   const rev = store.game?.total_revenue || 0
-  if (rev >= 30000) return t('score.rankMaster')
-  if (rev >= 20000) return t('score.rankExpert')
-  if (rev >= 12000) return t('score.rankPractitioner')
-  if (rev >= 6000)  return t('score.rankStarter')
+  if (rev >= 700000) return t('score.rankMaster')
+  if (rev >= 500000) return t('score.rankExpert')
+  if (rev >= 300000) return t('score.rankPractitioner')
+  if (rev >= 150000) return t('score.rankStarter')
   return t('score.rankLearning')
 })
 
 const rankColor = computed(() => {
   const rev = store.game?.total_revenue || 0
-  if (rev >= 30000) return 'text-yellow-400'
-  if (rev >= 20000) return 'text-yellow-300'
-  if (rev >= 12000) return 'text-slate-300'
-  if (rev >= 6000)  return 'text-amber-600'
+  if (rev >= 700000) return 'text-yellow-400'
+  if (rev >= 500000) return 'text-yellow-300'
+  if (rev >= 300000) return 'text-slate-300'
+  if (rev >= 150000) return 'text-amber-600'
   return 'text-slate-500'
 })
+
+function fmtRub(n) {
+  return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
+}
 
 async function newGame() {
   const game = store.game

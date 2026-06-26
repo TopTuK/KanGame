@@ -1,323 +1,469 @@
 """
-Card and event definitions for the getKanban simulation.
-Based on getKanban Version 2 mechanics.
+Card and event definitions — ported from shtaked32-code/kanbangame (js/data.js).
+  50 Standard (S1-S50)  · 5 Fixed-date (F1-F5)
+   5 Intangible (I1-I5) · 4 Expedite   (E1-E4)
 """
+import math
 
-CARD_DEFINITIONS = [
-    # Standard cards (blue) - regular features
-    {"key": "S1",  "title": "Mobile Push Notifications",     "type": "standard",   "color": "blue",   "analysis": 2, "dev": 4, "test": 2, "revenue": 100, "start_column": "options"},
-    {"key": "S2",  "title": "User Profile Dashboard",        "type": "standard",   "color": "blue",   "analysis": 1, "dev": 5, "test": 2, "revenue": 100, "start_column": "options"},
-    {"key": "S3",  "title": "Search & Filter",               "type": "standard",   "color": "blue",   "analysis": 2, "dev": 3, "test": 2, "revenue": 100, "start_column": "options"},
-    {"key": "S4",  "title": "Analytics Dashboard",           "type": "standard",   "color": "blue",   "analysis": 3, "dev": 6, "test": 3, "revenue": 100, "start_column": "options"},
-    {"key": "S5",  "title": "Email Notifications",           "type": "standard",   "color": "blue",   "analysis": 2, "dev": 4, "test": 2, "revenue": 100, "start_column": "options"},
-    {"key": "S6",  "title": "API Rate Limiting",             "type": "standard",   "color": "blue",   "analysis": 1, "dev": 3, "test": 1, "revenue": 100, "start_column": "options"},
-    {"key": "S7",  "title": "Dark Mode",                     "type": "standard",   "color": "blue",   "analysis": 2, "dev": 5, "test": 3, "revenue": 100, "start_column": "options"},
-    {"key": "S8",  "title": "Export to CSV",                 "type": "standard",   "color": "blue",   "analysis": 1, "dev": 4, "test": 2, "revenue": 100, "start_column": "analysis"},
-    {"key": "S9",  "title": "Two-Factor Authentication",     "type": "standard",   "color": "blue",   "analysis": 2, "dev": 6, "test": 3, "revenue": 100, "start_column": "analysis"},
-    {"key": "S10", "title": "Bulk Import",                   "type": "standard",   "color": "blue",   "analysis": 1, "dev": 4, "test": 2, "revenue": 100, "start_column": "ready"},
-    {"key": "S11", "title": "Real-time Collaboration",       "type": "standard",   "color": "blue",   "analysis": 3, "dev": 5, "test": 3, "revenue": 100, "start_column": "options"},
-    {"key": "S12", "title": "Audit Log",                     "type": "standard",   "color": "blue",   "analysis": 2, "dev": 3, "test": 2, "revenue": 100, "start_column": "options"},
-    {"key": "S13", "title": "Webhook Integration",           "type": "standard",   "color": "blue",   "analysis": 1, "dev": 6, "test": 3, "revenue": 100, "start_column": "options"},
-    {"key": "S14", "title": "Role-based Permissions",        "type": "standard",   "color": "blue",   "analysis": 2, "dev": 4, "test": 2, "revenue": 100, "start_column": "options"},
-    {"key": "S15", "title": "Offline Mode",                  "type": "standard",   "color": "blue",   "analysis": 3, "dev": 3, "test": 2, "revenue": 100, "start_column": "options"},
-    {"key": "S16", "title": "Custom Reports",                "type": "standard",   "color": "blue",   "analysis": 2, "dev": 5, "test": 3, "revenue": 100, "start_column": "options"},
+# Reference initial board (state.js)
+INITIAL_BOARD = {
+    "test": ["S1", "S2", "S3"],
+    "dev_done": ["S4", "S5"],
+    "development": ["S6", "S7"],
+    "analysis_done": ["S8"],
+    "analysis": ["S9", "S10"],
+    "ready": ["S11", "S12", "S13", "F1", "I1"],
+}
 
-    # Fixed date cards (yellow) - must deploy by due day
-    {"key": "F1",  "title": "GDPR Compliance Update",        "type": "fixed_date", "color": "yellow", "analysis": 2, "dev": 4, "test": 2, "revenue": 150, "due_day": 12, "penalty": 500, "start_column": "ready"},
-    {"key": "F2",  "title": "Year-end Reporting Feature",    "type": "fixed_date", "color": "yellow", "analysis": 2, "dev": 3, "test": 2, "revenue": 150, "due_day": 18, "penalty": 300, "start_column": "options"},
+TYPE_MAP = {
+    "s": "standard",
+    "f": "fixed_date",
+    "i": "intangible",
+    "e": "expedite",
+}
 
-    # Expedite cards (red) - bypass WIP limits, highest priority
-    {"key": "E1",  "title": "Critical Security Patch",       "type": "expedite",   "color": "red",    "analysis": 1, "dev": 2, "test": 1, "revenue": 0,   "start_column": "options"},
-    {"key": "E2",  "title": "Production Outage Fix",         "type": "expedite",   "color": "red",    "analysis": 1, "dev": 2, "test": 1, "revenue": 0,   "start_column": "options"},
+COLOR_MAP = {
+    "standard": "blue",
+    "fixed_date": "yellow",
+    "intangible": "gray",
+    "expedite": "red",
+}
 
-    # Intangible cards (gray) - tech debt, no direct revenue
-    {"key": "I1",  "title": "Test Automation Framework",     "type": "intangible", "color": "gray",   "analysis": 1, "dev": 2, "test": 1, "revenue": 0,   "start_column": "options"},
-    {"key": "I2",  "title": "CI/CD Pipeline Improvement",    "type": "intangible", "color": "gray",   "analysis": 2, "dev": 3, "test": 1, "revenue": 0,   "start_column": "options"},
-    {"key": "I3",  "title": "Database Index Optimization",   "type": "intangible", "color": "gray",   "analysis": 1, "dev": 2, "test": 2, "revenue": 0,   "start_column": "options"},
-    {"key": "I4",  "title": "Code Refactoring Sprint",       "type": "intangible", "color": "gray",   "analysis": 2, "dev": 2, "test": 1, "revenue": 0,   "start_column": "options"},
-
-    # Bug cards (orange) - discovered during game
-    {"key": "B1",  "title": "Login Crash on iOS",            "type": "bug",        "color": "orange", "analysis": 0, "dev": 2, "test": 2, "revenue": 0,   "start_column": "options"},
-    {"key": "B2",  "title": "Data Loss on Save",             "type": "bug",        "color": "orange", "analysis": 0, "dev": 3, "test": 2, "revenue": 0,   "start_column": "options"},
-    {"key": "B3",  "title": "Memory Leak in Reports",        "type": "bug",        "color": "orange", "analysis": 0, "dev": 2, "test": 1, "revenue": 0,   "start_column": "options"},
-    {"key": "B4",  "title": "Broken Export Feature",         "type": "bug",        "color": "orange", "analysis": 0, "dev": 1, "test": 1, "revenue": 0,   "start_column": "options"},
+# Raw STORIES from reference data.js
+_STORIES_RAW = [
+    {"key": "S1", "type": "s", "val": 7700, "w": [8, 8, 6]},
+    {"key": "S2", "type": "s", "val": 8400, "w": [10, 9, 6]},
+    {"key": "S3", "type": "s", "val": 7700, "w": [9, 9, 7]},
+    {"key": "S4", "type": "s", "val": 7000, "w": [8, 8, 6]},
+    {"key": "S5", "type": "s", "val": 9100, "w": [10, 9, 7]},
+    {"key": "S6", "type": "s", "val": 7700, "w": [9, 7, 3]},
+    {"key": "S7", "type": "s", "val": 8400, "w": [10, 8, 9]},
+    {"key": "S8", "type": "s", "val": 7000, "w": [8, 8, 9]},
+    {"key": "S9", "type": "s", "val": 8400, "w": [9, 9, 12]},
+    {"key": "S10", "type": "s", "val": 7700, "w": [10, 9, 7]},
+    {"key": "S11", "type": "s", "val": 9100, "w": [12, 7, 9]},
+    {"key": "S12", "type": "s", "val": 7000, "w": [7, 8, 10]},
+    {"key": "S13", "type": "s", "val": 7000, "w": [8, 9, 9]},
+    {"key": "S14", "type": "s", "val": 7000, "w": [5, 6, 4]},
+    {"key": "S15", "type": "s", "val": 4900, "w": [5, 5, 4]},
+    {"key": "S16", "type": "s", "val": 4200, "w": [4, 4, 3]},
+    {"key": "S17", "type": "s", "val": 4900, "w": [5, 5, 4]},
+    {"key": "S18", "type": "s", "val": 4900, "w": [5, 6, 4]},
+    {"key": "S19", "type": "s", "val": 7000, "w": [6, 6, 5]},
+    {"key": "S20", "type": "s", "val": 5600, "w": [5, 5, 4]},
+    {"key": "S21", "type": "s", "val": 4900, "w": [4, 5, 3]},
+    {"key": "S22", "type": "s", "val": 6300, "w": [6, 6, 5]},
+    {"key": "S23", "type": "s", "val": 7700, "w": [7, 6, 5]},
+    {"key": "S24", "type": "s", "val": 6300, "w": [6, 6, 5]},
+    {"key": "S25", "type": "s", "val": 5600, "w": [5, 5, 4]},
+    {"key": "S26", "type": "s", "val": 7700, "w": [7, 7, 5]},
+    {"key": "S27", "type": "s", "val": 7000, "w": [6, 7, 5]},
+    {"key": "S28", "type": "s", "val": 6300, "w": [6, 6, 5]},
+    {"key": "S29", "type": "s", "val": 7700, "w": [7, 7, 6]},
+    {"key": "S30", "type": "s", "val": 4900, "w": [4, 5, 3]},
+    {"key": "S31", "type": "s", "val": 5600, "w": [5, 6, 4]},
+    {"key": "S32", "type": "s", "val": 5600, "w": [5, 5, 4]},
+    {"key": "S33", "type": "s", "val": 4200, "w": [4, 4, 3]},
+    {"key": "S34", "type": "s", "val": 9100, "w": [8, 8, 6]},
+    {"key": "S35", "type": "s", "val": 6300, "w": [5, 6, 5]},
+    {"key": "S36", "type": "s", "val": 7700, "w": [7, 6, 5]},
+    {"key": "S37", "type": "s", "val": 5600, "w": [5, 5, 4]},
+    {"key": "S38", "type": "s", "val": 5600, "w": [5, 6, 4]},
+    {"key": "S39", "type": "s", "val": 7000, "w": [6, 6, 5]},
+    {"key": "S40", "type": "s", "val": 6300, "w": [5, 6, 4]},
+    {"key": "S41", "type": "s", "val": 7700, "w": [7, 7, 5]},
+    {"key": "S42", "type": "s", "val": 6300, "w": [6, 6, 5]},
+    {"key": "S43", "type": "s", "val": 4900, "w": [4, 5, 3]},
+    {"key": "S44", "type": "s", "val": 7700, "w": [7, 7, 5]},
+    {"key": "S45", "type": "s", "val": 6300, "w": [6, 6, 4]},
+    {"key": "S46", "type": "s", "val": 6300, "w": [6, 6, 5]},
+    {"key": "S47", "type": "s", "val": 7700, "w": [7, 7, 5]},
+    {"key": "S48", "type": "s", "val": 6300, "w": [5, 6, 5]},
+    {"key": "S49", "type": "s", "val": 4900, "w": [4, 5, 4]},
+    {"key": "S50", "type": "s", "val": 7700, "w": [7, 7, 5]},
+    {"key": "F1", "type": "f", "val": 10500, "due_day": 15, "w": [2, 3, 2]},
+    {"key": "F2", "type": "f", "val": -35000, "due_day": 20, "w": [4, 5, 3]},
+    {"key": "F3", "type": "f", "val": 7000, "due_day": 25, "w": [8, 9, 8]},
+    {"key": "F4", "type": "f", "val": 14000, "due_day": 30, "w": [6, 7, 5]},
+    {"key": "F5", "type": "f", "val": -21000, "due_day": 28, "w": [5, 6, 4]},
+    {"key": "I1", "type": "i", "title": "Обновление базы данных", "w": [6, 9, 7], "buff": "developer"},
+    {"key": "I2", "type": "i", "title": "Документация легаси-кода", "w": [2, 6, 4], "buff": "analyst"},
+    {"key": "I3", "type": "i", "title": "Рефакторинг ядра системы", "w": [4, 7, 5], "buff": "developer"},
+    {"key": "I4", "type": "i", "title": "Настройка CI/CD пайплайна", "w": [3, 5, 3], "buff": "tester"},
+    {"key": "I5", "type": "i", "title": "Улучшение покрытия тестами", "w": [2, 4, 5], "buff": "tester"},
+    {"key": "E1", "type": "e", "val": 140000, "due_day": 18, "appear_day": 15, "w": [3, 4, 2]},
+    {"key": "E2", "type": "e", "val": -175000, "due_day": 25, "appear_day": 20, "w": [4, 5, 3]},
+    {"key": "E3", "type": "e", "val": -70000, "due_day": 30, "appear_day": 28, "w": [3, 4, 3]},
+    {"key": "E4", "type": "e", "val": 210000, "due_day": 35, "appear_day": 32, "w": [5, 6, 4]},
 ]
 
-# Initial columns for cards at game start
-INITIAL_DEPLOYED = []
+# English titles for standard/fixed/expedite (intangible keep Russian from reference)
+_EN_TITLES = {
+    "S1": "Real-time Dashboard", "S2": "Advanced Search", "S3": "Multi-language Support",
+    "S4": "OAuth Integration", "S5": "GraphQL API", "S6": "Mobile Push Notifications",
+    "S7": "Video Player", "S8": "Mobile App (iOS)", "S9": "Mobile App (Android)",
+    "S10": "Data Export Platform", "S11": "Microservices Architecture", "S12": "Advanced Analytics",
+    "S13": "Reporting Engine", "S14": "Role-based Access Control", "S15": "Two-Factor Authentication",
+    "S16": "Dark Mode", "S17": "User Profile", "S18": "Email Notifications",
+    "S19": "Activity Feed", "S20": "API Rate Limiting", "S21": "Webhook Integration",
+    "S22": "Audit Log", "S23": "Bulk Import", "S24": "Custom Reports",
+    "S25": "SSO Integration", "S26": "Session Management", "S27": "Data Visualization",
+    "S28": "Comment System", "S29": "Tagging System", "S30": "File Upload Service",
+    "S31": "Search Filters", "S32": "Notification Center", "S33": "Quick Actions Menu",
+    "S34": "Analytics Dashboard", "S35": "Dashboard Widgets", "S36": "Chart Library",
+    "S37": "PDF Export", "S38": "CSV Export", "S39": "Scheduled Reports",
+    "S40": "Email Templates", "S41": "Notification Preferences", "S42": "User Onboarding Flow",
+    "S43": "Help Center", "S44": "In-app Tutorial", "S45": "Feedback Widget",
+    "S46": "Error Tracking", "S47": "Performance Monitor", "S48": "Accessibility Improvements",
+    "S49": "Browser Extension", "S50": "API Documentation",
+    "F1": "Regulatory Compliance Update", "F2": "Year-end Financial Reporting",
+    "F3": "Partner API Integration", "F4": "Enterprise SSO Rollout",
+    "F5": "Security Audit Remediation",
+    "E1": "Urgent Client Adaptation", "E2": "Critical Security Vulnerability",
+    "E3": "Encryption Security Patch", "E4": "Sales-committed Feature",
+}
 
-# Event definitions for each day
+
+def _build_card_definitions():
+    defs = []
+    for i, raw in enumerate(_STORIES_RAW):
+        ctype = TYPE_MAP[raw["type"]]
+        w = raw["w"]
+        entry = {
+            "key": raw["key"],
+            "type": ctype,
+            "color": COLOR_MAP[ctype],
+            "title": raw.get("title") or _EN_TITLES.get(raw["key"], raw["key"]),
+            "title_en": _EN_TITLES.get(raw["key"], raw.get("title", raw["key"])),
+            "analysis": w[0],
+            "dev": w[1],
+            "test": w[2],
+            "val": raw.get("val", 0),
+            "revenue": raw.get("val", 0) if raw["type"] == "s" else 0,
+            "sort_order": i,
+        }
+        if "due_day" in raw:
+            entry["due_day"] = raw["due_day"]
+        if "appear_day" in raw:
+            entry["appear_day"] = raw["appear_day"]
+        if "buff" in raw:
+            entry["buff"] = raw["buff"]
+        defs.append(entry)
+    return defs
+
+
+CARD_DEFINITIONS = _build_card_definitions()
+
+# Day events keyed by day (reference DAY_EVENTS days 9-35)
+DAY_EVENTS = {
+    9: {
+        "key": "welcome",
+        "title": "First Day Complete",
+        "description": (
+            "You have completed your first day of the game.\n\n"
+            "This dialog will appear at the end of each day with information and reminders.\n"
+            "You earn daily revenue from deployed stories.\n"
+            "Don't forget Fixed-date stories — deliver on time for a bonus or avoid a penalty. "
+            "Each overdue day costs 20% of the story value!\n\n"
+            "Good luck! Remember: story F1 must be released by end of day 15."
+        ),
+        "effects": [],
+    },
+    10: {
+        "key": "tester_sick",
+        "title": "Tester Out Sick",
+        "description": (
+            "One of your testers slipped and broke their leg. "
+            "They are on sick leave until further notice.\n"
+            "The team is temporarily down one tester."
+        ),
+        "effects": [{"type": "workerOut", "workerType": "tester"}],
+    },
+    11: {
+        "key": "dev_hired",
+        "title": "New Developer Hired",
+        "description": "A new developer has been hired — the development team is back at full strength tomorrow.",
+        "effects": [{"type": "workerIn", "workerType": "developer"}],
+    },
+    12: {
+        "key": "blocker_test",
+        "title": "Serious Defect in Testing",
+        "description": (
+            "A serious defect was found in the first standard story in the Test column.\n"
+            "Further testing of that story is impossible until the defect is fixed. "
+            "Other stories may bypass it. Any team member may work on a blocked story.\n\n"
+            "Don't forget Intangible stories — they boost team efficiency and reduce defects."
+        ),
+        "effects": [{"type": "blocker", "lane": "test"}],
+    },
+    13: {
+        "key": "dev_conference",
+        "title": "Developer at Conference",
+        "description": (
+            "One of your developers is travelling to a tech conference for 2 days.\n"
+            "The team is temporarily down one developer."
+        ),
+        "effects": [{"type": "workerOut", "workerType": "developer"}],
+    },
+    14: {
+        "key": "e1_announce",
+        "title": "Urgent Client Request",
+        "description": (
+            "A key client needs an urgent product adaptation before their fiscal year ends in four days.\n"
+            "You agreed to finish by end of day 18. Success earns 140,000 ₽; failure means no payment "
+            "plus 20% penalty per overdue day.\n\n"
+            "Remember: story F2 must be released by end of day 20."
+        ),
+        "effects": [],
+    },
+    15: {
+        "key": "dev_returns",
+        "title": "Developer Returns",
+        "description": "The developer returns from the conference — development team back at full strength tomorrow.",
+        "effects": [{"type": "workerIn", "workerType": "developer"}],
+    },
+    16: {
+        "key": "carlos_on",
+        "title": "Carlos Policy",
+        "description": (
+            "Alison hired a new test manager — Carlos.\n"
+            "Carlos asks the team to pay extra attention to testing quality.\n"
+            "You may still assign any available team member to any active task, "
+            "but specialists remain more effective in their own area."
+        ),
+        "effects": [{"type": "carlosOn"}],
+    },
+    17: {
+        "key": "ready_wip",
+        "title": "Ready Queue WIP Reduced",
+        "description": (
+            "Notice that the Ready queue is never empty.\n"
+            "Ready queue WIP limit is now 3. Don't remove existing stories — just respect the new limit.\n"
+            "How do you think this will affect cycle time?"
+        ),
+        "effects": [{"type": "wipChange", "lane": "ready", "value": 3}],
+    },
+    18: {
+        "key": "analyst_vacation",
+        "title": "Analyst on Vacation",
+        "description": (
+            "One analyst goes on vacation tomorrow and returns on day 22.\n"
+            "The team is temporarily down one analyst."
+        ),
+        "effects": [{"type": "workerOut", "workerType": "analyst"}],
+    },
+    19: {
+        "key": "e2_announce",
+        "title": "Security Vulnerability",
+        "description": (
+            "A serious encryption vulnerability was discovered this week.\n"
+            "Customers will issue a one-time fine of 175,000 ₽ if not fixed by end of day 25.\n\n"
+            "Remember: story F3 must be released by end of day 25."
+        ),
+        "effects": [],
+    },
+    20: {
+        "key": "blocker_dev",
+        "title": "Developer Computer Infected",
+        "description": (
+            "A developer's computer was infected with a virus — they cannot continue work on their story.\n"
+            "Further development of that story is impossible until the machine is cleaned. "
+            "Any team member may work on a blocked story."
+        ),
+        "effects": [{"type": "blocker", "lane": "development"}],
+    },
+    21: {
+        "key": "analyst_returns",
+        "title": "Analyst Returns",
+        "description": "The analyst returns from vacation and will resume work tomorrow.",
+        "effects": [{"type": "workerIn", "workerType": "analyst"}],
+    },
+    22: {
+        "key": "carlos_off",
+        "title": "Carlos Fired",
+        "description": (
+            "Alison notices testing has become a bottleneck. She asks Carlos to cooperate — he refuses and is fired.\n"
+            "An additional tester is hired. Carlos's policy is cancelled."
+        ),
+        "effects": [{"type": "carlosOff"}, {"type": "workerIn", "workerType": "tester"}],
+    },
+    23: {
+        "key": "blocker_test_2",
+        "title": "Test Cases Deleted",
+        "description": (
+            "A tester accidentally deleted a document with important test cases.\n"
+            "Further testing of that story is impossible until restored from backup. "
+            "Any team member may work on a blocked story."
+        ),
+        "effects": [{"type": "blocker", "lane": "test"}],
+    },
+    24: {
+        "key": "tester_vacation",
+        "title": "Tester on Vacation",
+        "description": (
+            "A tester decided to take a few days off.\n"
+            "The team is temporarily down one tester."
+        ),
+        "effects": [{"type": "workerOut", "workerType": "tester"}],
+    },
+    25: {
+        "key": "analyst_quits",
+        "title": "Analyst Quits",
+        "description": "An analyst decided to quit and pursue something less stressful.",
+        "effects": [{"type": "workerOut", "workerType": "analyst"}],
+    },
+    26: {
+        "key": "team_restructure",
+        "title": "Team Restructure",
+        "description": "A former analyst from the development team moves to the analysis team.",
+        "effects": [{"type": "workerOut", "workerType": "developer"}, {"type": "workerIn", "workerType": "analyst"}],
+    },
+    27: {
+        "key": "e3_announce",
+        "title": "Forgotten Security Update",
+        "description": (
+            "An important security update was forgotten in the backlog.\n"
+            "Customers will sue for 70,000 ₽ if not deployed within 3 days."
+        ),
+        "effects": [],
+    },
+    28: {
+        "key": "quiet_day",
+        "title": "Quiet Day",
+        "description": "Nothing special happened today.",
+        "effects": [],
+    },
+    29: {
+        "key": "tester_returns",
+        "title": "Tester Returns",
+        "description": "The tester returns from their trip — team back at full strength tomorrow.",
+        "effects": [{"type": "workerIn", "workerType": "tester"}],
+    },
+    30: {
+        "key": "final_week",
+        "title": "Final Week",
+        "description": "Remember: the game ends after day 35.",
+        "effects": [],
+    },
+    31: {
+        "key": "e4_announce",
+        "title": "Sales Over-promised",
+        "description": (
+            "A sales manager sold a product that isn't ready and promised delivery in 3 days.\n"
+            "The client will pay 210,000 ₽ if delivered by end of day 35, otherwise they cancel."
+        ),
+        "effects": [],
+    },
+    32: {
+        "key": "analyst_vacation_2",
+        "title": "Analyst on Vacation",
+        "description": (
+            "An analyst goes on vacation tomorrow and returns in two weeks.\n"
+            "The team is temporarily down one analyst."
+        ),
+        "effects": [{"type": "workerOut", "workerType": "analyst"}],
+    },
+    33: {
+        "key": "lockdown",
+        "title": "Specialisation Lockdown",
+        "description": (
+            "Management announced full role specialisation.\n"
+            "Specialists remain most effective in their own area, but any available "
+            "team member may still help on any active task."
+        ),
+        "effects": [{"type": "lockdownOn"}],
+    },
+    34: {
+        "key": "dev_quits",
+        "title": "Developer Resigns",
+        "description": (
+            "A developer decided to quit and left today.\n"
+            "The team is down one developer until replaced."
+        ),
+        "effects": [{"type": "workerOut", "workerType": "developer"}],
+    },
+    35: {
+        "key": "game_over",
+        "title": "Game Over",
+        "description": (
+            "You have reached the end! Be sure to review the charts to analyse performance.\n"
+            "Thank you for playing!"
+        ),
+        "effects": [],
+    },
+}
+
+# Build EVENT_DEFINITIONS list for DB storage
 EVENT_DEFINITIONS = [
     {
-        "day": 1,
-        "key": "start",
-        "title": "Welcome to the Kanban Game!",
-        "type": "info",
-        "description": (
-            "Your team is ready to deliver software features using Kanban.\n\n"
-            "Team capacity per day:\n"
-            "• 2 Analysts → 4 analysis points\n"
-            "• 3 Developers → 6 dev points\n"
-            "• 2 Testers → 4 test points\n\n"
-            "WIP Limits:\n"
-            "• Analysis: 3 cards max\n"
-            "• Development: 5 cards max\n"
-            "• Test: 3 cards max\n\n"
-            "Pull cards from right to left. Assign capacity each day. Deploy to earn revenue!"
-        ),
-        "payload": {}
-    },
-    {
-        "day": 2,
-        "key": "pull_s8",
-        "title": "Product Owner Priority",
-        "type": "info",
-        "description": (
-            "The Product Owner has reviewed the backlog.\n\n"
-            "Feature S8 (Export to CSV) and S9 (Two-Factor Authentication) are already in "
-            "Analysis — the team has been working on them. Keep the flow moving!"
-        ),
-        "payload": {}
-    },
-    {
-        "day": 3,
-        "key": "billing_1",
-        "title": "💰 Billing Cycle 1",
-        "type": "billing",
-        "description": (
-            "End of billing cycle!\n\n"
-            "Revenue is calculated based on deployed features.\n"
-            "Each standard card earns $100/day.\n"
-            "Each fixed-date card earns $150/day.\n\n"
-            "Keep delivering to increase daily revenue!"
-        ),
-        "payload": {}
-    },
-    {
-        "day": 4,
-        "key": "bug_b1",
-        "title": "🐛 Bug Discovered!",
-        "type": "new_card",
-        "description": (
-            "QA has reported a critical bug in production!\n\n"
-            "Bug B1 (Login Crash on iOS) has been added to the Ready queue.\n\n"
-            "Bugs don't generate revenue but must be fixed. "
-            "An unresolved bug costs the team reputation — prioritize fixing it!"
-        ),
-        "payload": {"card_key": "B1"}
-    },
-    {
-        "day": 5,
-        "key": "sick_dev",
-        "title": "🤒 Developer Out Sick",
-        "type": "capacity_change",
-        "description": (
-            "One of your developers is sick today!\n\n"
-            "Development capacity is reduced by 1 point today (5 → 4).\n\n"
-            "Plan your work accordingly and prioritize the most important cards."
-        ),
-        "payload": {"capacity_delta": {"development": -2}}
-    },
-    {
-        "day": 6,
-        "key": "billing_2",
-        "title": "💰 Billing Cycle 2",
-        "type": "billing",
-        "description": "End of billing cycle! Revenue calculated from all deployed features.",
-        "payload": {}
-    },
-    {
-        "day": 7,
-        "key": "expedite_e1",
-        "title": "🚨 Expedite Request!",
-        "type": "new_card",
-        "description": (
-            "URGENT! A critical security vulnerability has been discovered!\n\n"
-            "Card E1 (Critical Security Patch) has been added to Ready.\n\n"
-            "Expedite cards:\n"
-            "• Bypass ALL WIP limits\n"
-            "• Must be treated as highest priority\n"
-            "• Move to Analysis immediately!\n\n"
-            "Only ONE expedite card can be in flight at a time."
-        ),
-        "payload": {"card_key": "E1"}
-    },
-    {
-        "day": 8,
-        "key": "cross_train",
-        "title": "📚 Cross-Training Opportunity",
-        "type": "capacity_change",
-        "description": (
-            "The team has agreed to cross-train today!\n\n"
-            "An analyst helps in development: +1 dev capacity today.\n"
-            "But analysis capacity decreases by 1.\n\n"
-            "Total: Analysis -1, Development +1"
-        ),
-        "payload": {"capacity_delta": {"analysis": -2, "development": 2}}
-    },
-    {
-        "day": 9,
-        "key": "billing_3",
-        "title": "💰 Billing Cycle 3",
-        "type": "billing",
-        "description": "End of billing cycle! Revenue calculated from all deployed features.",
-        "payload": {}
-    },
-    {
-        "day": 10,
-        "key": "bug_b2",
-        "title": "🐛 Another Bug!",
-        "type": "new_card",
-        "description": (
-            "Another bug has been reported by customers!\n\n"
-            "Bug B2 (Data Loss on Save) has been added to the Ready queue.\n\n"
-            "This is a HIGH priority bug — data loss affects customer trust. "
-            "Consider pulling it into development soon."
-        ),
-        "payload": {"card_key": "B2"}
-    },
-    {
-        "day": 11,
-        "key": "tech_debt",
-        "title": "⚙️ Technical Debt",
-        "type": "new_card",
-        "description": (
-            "The team has identified critical technical debt!\n\n"
-            "Card I1 (Test Automation Framework) has been added to Ready.\n\n"
-            "Intangible cards don't generate direct revenue but improve team efficiency. "
-            "Completing I1 will increase test capacity by 1 permanently!"
-        ),
-        "payload": {"card_key": "I1", "effect": "test_capacity_plus_1"}
-    },
-    {
-        "day": 12,
-        "key": "billing_4_deadline",
-        "title": "💰 Billing Cycle 4 — Fixed Date Deadline!",
-        "type": "billing",
-        "description": (
-            "End of billing cycle!\n\n"
-            "⚠️ DEADLINE CHECK: Feature F1 (GDPR Compliance Update) was due today!\n\n"
-            "If F1 has not been deployed, a $500 penalty has been applied.\n"
-            "Regulatory deadlines must be met!"
-        ),
-        "payload": {"deadline_card": "F1"}
-    },
-    {
-        "day": 13,
-        "key": "production_block",
-        "title": "🔒 Production Incident",
-        "type": "info",
-        "description": (
-            "A production incident occurred overnight but was resolved by morning.\n\n"
-            "The on-call team handled it — no impact to today's capacity.\n\n"
-            "However, all developers must attend a post-mortem meeting after standup. "
-            "No special capacity changes today, but plan carefully!"
-        ),
-        "payload": {}
-    },
-    {
-        "day": 14,
-        "key": "overtime",
-        "title": "💪 Team Overtime",
-        "type": "capacity_change",
-        "description": (
-            "The team has agreed to work overtime today to catch up!\n\n"
-            "+1 to ALL capacities today:\n"
-            "• Analysis: +1 (total 5)\n"
-            "• Development: +1 (total 7)\n"
-            "• Test: +1 (total 5)\n\n"
-            "Use this capacity wisely — it's a one-time boost!"
-        ),
-        "payload": {"capacity_delta": {"analysis": 1, "development": 1, "test": 1}}
-    },
-    {
-        "day": 15,
-        "key": "billing_5",
-        "title": "💰 Billing Cycle 5",
-        "type": "billing",
-        "description": "End of billing cycle! Revenue calculated from all deployed features.",
-        "payload": {}
-    },
-    {
-        "day": 16,
-        "key": "bug_b3",
-        "title": "🐛 Bug Reported!",
-        "type": "new_card",
-        "description": (
-            "Users are reporting a memory leak!\n\n"
-            "Bug B3 (Memory Leak in Reports) has been added to Ready.\n\n"
-            "This bug is causing performance degradation for all users. "
-            "Fix it soon to maintain customer satisfaction."
-        ),
-        "payload": {"card_key": "B3"}
-    },
-    {
-        "day": 17,
-        "key": "expedite_e2",
-        "title": "🚨 New Expedite!",
-        "type": "new_card",
-        "description": (
-            "Emergency! A production outage has been reported!\n\n"
-            "Card E2 (Production Outage Fix) has been added to Ready.\n\n"
-            "This expedite card must be prioritized immediately.\n"
-            "Remember: only one expedite card in flight at a time!"
-        ),
-        "payload": {"card_key": "E2"}
-    },
-    {
-        "day": 18,
-        "key": "billing_6_deadline2",
-        "title": "💰 Billing Cycle 6 — Fixed Date Deadline!",
-        "type": "billing",
-        "description": (
-            "End of billing cycle!\n\n"
-            "⚠️ DEADLINE CHECK: Feature F2 (Year-end Reporting) was due today!\n\n"
-            "If F2 has not been deployed, a $300 penalty has been applied.\n"
-            "Final stretch — only 3 days left!"
-        ),
-        "payload": {"deadline_card": "F2"}
-    },
-    {
-        "day": 19,
-        "key": "focus",
-        "title": "🎯 Final Sprint",
-        "type": "capacity_change",
-        "description": (
-            "Management has cleared all meetings for the last 3 days!\n\n"
-            "+1 development capacity today and tomorrow.\n"
-            "Development: +1 (total 7)\n\n"
-            "Push to get those last features deployed!"
-        ),
-        "payload": {"capacity_delta": {"development": 2}}
-    },
-    {
-        "day": 20,
-        "key": "all_hands",
-        "title": "🚀 All Hands on Deck",
-        "type": "capacity_change",
-        "description": (
-            "Last day before final billing! Everyone is focused on delivery.\n\n"
-            "+1 to ALL capacities:\n"
-            "• Analysis: +1\n"
-            "• Development: +1\n"
-            "• Test: +1\n\n"
-            "Make it count!"
-        ),
-        "payload": {"capacity_delta": {"analysis": 1, "development": 1, "test": 1}}
-    },
-    {
-        "day": 21,
-        "key": "game_over",
-        "title": "🏁 Game Over — Final Day!",
-        "type": "billing",
-        "description": (
-            "The simulation has ended!\n\n"
-            "Final billing cycle complete. Your total score is based on:\n"
-            "• Revenue from deployed features\n"
-            "• Penalties for missed deadlines\n"
-            "• Cards in flight (WIP) deductions\n\n"
-            "Click 'End Day' to see your final score!"
-        ),
-        "payload": {"final": True}
-    },
+        "day": day,
+        "key": ev["key"],
+        "title": ev["title"],
+        "type": "day_event",
+        "description": ev["description"],
+        "payload": {"effects": ev["effects"]},
+    }
+    for day, ev in sorted(DAY_EVENTS.items())
 ]
+
+# Pull move map: from done column → next active column
+PULL_MOVES = {
+    "ready": "analysis",
+    "analysis_done": "development",
+    "dev_done": "test",
+    "exp_ready": "exp_analysis",
+    "exp_analysis_done": "exp_development",
+    "exp_dev_done": "exp_test",
+}
+
+# Auto-advance map: from active column → done/deployed
+ADVANCE_MAP = {
+    "analysis": "analysis_done",
+    "development": "dev_done",
+    "test": "deployed",
+    "exp_analysis": "exp_analysis_done",
+    "exp_development": "exp_dev_done",
+    "exp_test": "exp_deployed",
+}
+
+# WIP lane groups
+WIP_GROUPS = {
+    "ready": ["ready"],
+    "analysis": ["analysis", "analysis_done"],
+    "development": ["development", "dev_done"],
+    "test": ["test"],
+    "exp_analysis": ["exp_analysis", "exp_analysis_done"],
+    "exp_development": ["exp_development", "exp_dev_done"],
+    "exp_test": ["exp_test"],
+}
+
+INITIAL_WIP = {"ready": 5, "analysis": 3, "development": 5, "test": 3, "expedite": 1}
+
+INITIAL_WORKERS = [
+    {"id": "a1", "type": "analyst", "active": True, "assigned_card_id": None},
+    {"id": "a2", "type": "analyst", "active": True, "assigned_card_id": None},
+    {"id": "a3", "type": "analyst", "active": False, "assigned_card_id": None},
+    {"id": "a4", "type": "analyst", "active": False, "assigned_card_id": None},
+    {"id": "d1", "type": "developer", "active": True, "assigned_card_id": None},
+    {"id": "d2", "type": "developer", "active": True, "assigned_card_id": None},
+    {"id": "d3", "type": "developer", "active": False, "assigned_card_id": None},
+    {"id": "d4", "type": "developer", "active": False, "assigned_card_id": None},
+    {"id": "t1", "type": "tester", "active": True, "assigned_card_id": None},
+    {"id": "t2", "type": "tester", "active": True, "assigned_card_id": None},
+    {"id": "t3", "type": "tester", "active": True, "assigned_card_id": None},
+    {"id": "t4", "type": "tester", "active": False, "assigned_card_id": None},
+]
+
+
+def apply_initial_work_remaining(analysis_total: int, dev_total: int, test_total: int, lane: str):
+    """Return (analysis_remaining, dev_remaining, test_remaining) for initial board placement."""
+    a, d, t = float(analysis_total), float(dev_total), float(test_total)
+    if lane in ("test", "dev_done"):
+        return 0.0, 0.0, t
+    if lane == "development":
+        return 0.0, math.ceil(dev_total * 0.6), t
+    if lane == "analysis_done":
+        return 0.0, d, t
+    if lane == "analysis":
+        return math.ceil(analysis_total * 0.6), d, t
+    return a, d, t

@@ -36,7 +36,7 @@
               :style="{ width: maxRevenue ? (m.daily_revenue / maxRevenue * 100) + '%' : '0%' }"
             ></div>
           </div>
-          <span class="text-emerald-400 w-14 text-right font-mono">${{ m.daily_revenue }}</span>
+          <span class="text-emerald-400 w-20 text-right font-mono text-[10px]">{{ fmtRub(m.daily_revenue) }}</span>
         </div>
       </div>
     </div>
@@ -54,13 +54,26 @@ import { useGameStore } from '../stores/gameStore.js'
 const { t } = useI18n()
 const store = useGameStore()
 
+function fmtRub(n) {
+  return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
+}
+
 const metrics = computed(() => store.game?.metrics || [])
 const cards = computed(() => store.game?.cards || [])
 
-const deployedCount = computed(() => cards.value.filter(c => c.column === 'deployed').length)
-const totalWip = computed(() => cards.value.filter(c => ['analysis', 'development', 'test'].includes(c.column)).length)
+const deployedCount = computed(() =>
+  cards.value.filter(c => ['deployed', 'exp_deployed'].includes(c.column)).length
+)
+const totalWip = computed(() =>
+  cards.value.filter(c =>
+    ['analysis', 'analysis_done', 'development', 'dev_done', 'test',
+     'exp_analysis', 'exp_analysis_done', 'exp_development', 'exp_dev_done', 'exp_test'].includes(c.column)
+  ).length
+)
 const dailyRevenue = computed(() =>
-  cards.value.filter(c => c.column === 'deployed').reduce((s, c) => s + c.revenue_per_day, 0)
+  cards.value
+    .filter(c => c.column === 'deployed' && c.card_type === 'standard')
+    .reduce((s, c) => s + (c.val || c.revenue_per_day || 0), 0)
 )
 const latestThroughput = computed(() => {
   const ms = metrics.value
@@ -69,18 +82,17 @@ const latestThroughput = computed(() => {
 const maxRevenue = computed(() => Math.max(1, ...metrics.value.map(m => m.daily_revenue)))
 
 const stats = computed(() => [
-  { label: t('metrics.revPerDay'),   value: '$' + dailyRevenue.value,  color: 'text-emerald-400' },
+  { label: t('metrics.revPerDay'),   value: fmtRub(dailyRevenue.value),  color: 'text-emerald-400' },
   { label: t('metrics.deployed'),    value: deployedCount.value,        color: 'text-sky-400' },
   { label: t('metrics.wip'),         value: totalWip.value,             color: 'text-amber-400' },
   { label: t('metrics.throughput'),  value: latestThroughput.value,    color: 'text-violet-400' },
 ])
 
 const cardTypes = computed(() => [
-  { key: 'standard',   label: t('metrics.standard'),   color: 'bg-blue-700' },
-  { key: 'expedite',   label: t('metrics.expedite'),   color: 'bg-red-700' },
-  { key: 'fixed_date', label: t('metrics.fixedDate'),  color: 'bg-yellow-700' },
-  { key: 'intangible', label: t('metrics.intangible'), color: 'bg-slate-600' },
-  { key: 'bug',        label: t('metrics.bug'),        color: 'bg-orange-700' },
+  { key: 'standard',   label: t('metrics.standard'),   color: 'bg-blue-600' },
+  { key: 'fixed_date', label: t('metrics.fixedDate'),  color: 'bg-yellow-600' },
+  { key: 'expedite',   label: t('metrics.expedite'),   color: 'bg-red-600' },
+  { key: 'intangible', label: t('metrics.intangible'), color: 'bg-slate-500' },
 ])
 
 function countByType(type) {

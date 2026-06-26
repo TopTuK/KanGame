@@ -1,5 +1,9 @@
 <template>
   <div class="min-h-screen bg-board-bg flex flex-col">
+    <div class="fixed top-4 right-4 z-50">
+      <LanguageSelector />
+    </div>
+
     <!-- Hero -->
     <div class="flex-1 flex flex-col items-center justify-center px-4 py-16">
       <!-- Logo / Title -->
@@ -86,7 +90,7 @@
               </div>
             </div>
             <div class="text-right">
-              <div class="text-emerald-400 font-mono font-bold">${{ g.total_revenue.toLocaleString() }}</div>
+              <div class="text-emerald-400 font-mono font-bold">{{ fmtRub(g.total_revenue) }}</div>
               <div :class="['text-xs font-medium px-2 py-0.5 rounded-full mt-1', statusColor(g.status)]">
                 {{ statusLabel(g.status) }}
               </div>
@@ -109,10 +113,15 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { gamesApi } from '../services/api.js'
 import { useGameContent } from '../composables/useGameContent.js'
+import LanguageSelector from '../components/LanguageSelector.vue'
 
 const { t } = useI18n()
 const { statusLabel } = useGameContent()
 const router = useRouter()
+
+function fmtRub(n) {
+  return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
+}
 const playerName = ref('')
 const gameName = ref('')
 const creating = ref(false)

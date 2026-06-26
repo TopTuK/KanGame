@@ -1,50 +1,34 @@
 <template>
-  <div class="flex flex-col w-52 flex-shrink-0 h-full">
-    <!-- Column header -->
-    <div :class="['rounded-t-xl px-3 py-2.5 flex items-center justify-between', headerClass]">
-      <div class="flex items-center gap-2">
-        <span class="text-base">{{ column.icon }}</span>
-        <div>
-          <div class="text-white font-semibold text-sm leading-tight">{{ column.label }}</div>
-          <div class="text-xs opacity-70">{{ column.description }}</div>
+  <div :class="['flex flex-col flex-shrink-0 h-full', column.pullable ? 'w-36' : 'w-44']">
+    <div :class="['rounded-t-xl px-2 py-2 flex items-center justify-between', headerClass]">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="text-sm">{{ column.icon }}</span>
+        <div class="min-w-0">
+          <div class="text-white font-semibold text-xs leading-tight truncate">{{ column.label }}</div>
         </div>
       </div>
-      <div class="flex items-center gap-1.5">
-        <!-- WIP indicator -->
-        <div v-if="column.wipLimit" :class="['text-xs font-mono font-bold px-1.5 py-0.5 rounded', wipClass]">
-          {{ cards.length }}/{{ column.wipLimit }}
-        </div>
-        <div v-else class="text-xs font-mono text-white/60">{{ cards.length }}</div>
+      <div v-if="displayWip" :class="['text-xs font-mono font-bold px-1 py-0.5 rounded flex-shrink-0', wipClass]">
+        {{ displayWip }}
       </div>
+      <div v-else-if="!column.wipLimit" class="text-xs font-mono text-white/60">{{ cards.length }}</div>
     </div>
 
-    <!-- WIP limit warning bar -->
-    <div v-if="column.wipLimit" class="h-1">
-      <div
-        :class="['h-full transition-all duration-300', wipBarClass]"
-        :style="{ width: wipPercent + '%' }"
-      ></div>
-    </div>
-
-    <!-- Cards area -->
     <div
       :class="[
-        'flex-1 overflow-y-auto rounded-b-xl p-2 space-y-2',
-        isAtLimit ? 'bg-red-950/20 border border-red-800/30' : 'bg-slate-800/50 border border-slate-700/30'
+        'flex-1 overflow-y-auto rounded-b-xl p-1.5 space-y-1.5 min-h-[80px]',
+        isAtLimit ? 'bg-red-950/20 border border-red-800/30' : 'bg-slate-800/50 border border-slate-700/30',
       ]"
-      @dragover.prevent
-      @drop="onDrop"
     >
       <KanbanCard
         v-for="card in cards"
         :key="card.id"
         :card="card"
         :column-key="column.key"
+        :pullable="column.pullable"
       />
 
-      <!-- Empty state -->
-      <div v-if="!cards.length" class="h-20 flex items-center justify-center">
-        <p class="text-slate-600 text-xs text-center">{{ t('columns.dropCards') }}</p>
+      <div v-if="!cards.length" class="h-12 flex items-center justify-center">
+        <p class="text-slate-600 text-[10px] text-center">—</p>
       </div>
     </div>
   </div>
@@ -52,62 +36,42 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useGameStore } from '../stores/gameStore.js'
 import KanbanCard from './KanbanCard.vue'
-
-const { t } = useI18n()
 
 const props = defineProps({
   column: Object,
   cards: Array,
+  wipCount: Number,
 })
 
-const store = useGameStore()
-
-const wipPercent = computed(() => {
-  if (!props.column.wipLimit) return 0
-  return Math.min(100, (props.cards.length / props.column.wipLimit) * 100)
+const displayWip = computed(() => {
+  if (props.column.wipLimit != null && props.wipCount != null) {
+    return `${props.wipCount}/${props.column.wipLimit}`
+  }
+  return null
 })
 
 const isAtLimit = computed(() =>
-  props.column.wipLimit && props.cards.length >= props.column.wipLimit
+  props.column.wipLimit != null && props.wipCount != null && props.wipCount >= props.column.wipLimit
 )
 
 const colorMap = {
-  slate:   { header: 'bg-slate-700',   bar: 'bg-slate-500' },
-  violet:  { header: 'bg-violet-900',  bar: 'bg-violet-500' },
-  sky:     { header: 'bg-sky-900',     bar: 'bg-sky-500' },
-  amber:   { header: 'bg-amber-900',   bar: 'bg-amber-500' },
-  emerald: { header: 'bg-emerald-900', bar: 'bg-emerald-500' },
-  red:     { header: 'bg-red-900',     bar: 'bg-red-500' },
+  slate: 'bg-slate-700',
+  violet: 'bg-violet-900',
+  sky: 'bg-sky-900',
+  amber: 'bg-amber-900',
+  emerald: 'bg-emerald-900',
+  red: 'bg-red-900',
 }
 
-const headerClass = computed(() => colorMap[props.column.color]?.header || 'bg-slate-700')
-
-const wipBarClass = computed(() => {
-  if (!props.column.wipLimit) return ''
-  const pct = wipPercent.value
-  if (pct >= 100) return 'bg-red-500'
-  if (pct >= 80) return 'bg-amber-500'
-  return colorMap[props.column.color]?.bar || 'bg-sky-500'
-})
+const headerClass = computed(() => colorMap[props.column.color] || 'bg-slate-700')
 
 const wipClass = computed(() => {
   if (!props.column.wipLimit) return ''
-  const count = props.cards.length
+  const count = props.wipCount ?? props.cards.length
   const limit = props.column.wipLimit
   if (count >= limit) return 'bg-red-500 text-white'
   if (count >= limit - 1) return 'bg-amber-500 text-black'
   return 'bg-white/20 text-white'
 })
-
-async function onDrop(e) {
-  // Ignore member drops — those are handled by the card's own drop zone
-  const memberId = e.dataTransfer.getData('memberId')
-  if (memberId) return
-  const cardId = e.dataTransfer.getData('cardId')
-  if (!cardId) return
-  await store.moveCard(cardId, props.column.key)
-}
 </script>

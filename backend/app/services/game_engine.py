@@ -1,12 +1,5 @@
 """
-Core game engine for the Kanban simulation.
-Implements the getKanban game mechanics:
-- Pull system (right to left)
-- WIP limits per column
-- Class of service (expedite bypasses WIP)
-- Capacity allocation to cards
-- Revenue / scoring
-- Event resolution
+Core game engine — ported from shtaked32-code/kanbangame js/mechanics.js
 """
 import random
 import uuid
@@ -14,35 +7,122 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
-from app.models.game import Game, Card, GameEvent, GameMetric, GameStatus, CardColumn, CardType
-from app.data.cards import CARD_DEFINITIONS, EVENT_DEFINITIONS
-from app.schemas.game import AllocateCapacityItem
+from app.models.game import Game, Card, GameEvent, GameMetric, GameStatus, CardColumn
+from app.data.cards import (
+    CARD_DEFINITIONS,
+    EVENT_DEFINITIONS,
+    INITIAL_BOARD,
+    INITIAL_WORKERS,
+    INITIAL_WIP,
+    PULL_MOVES,
+    ADVANCE_MAP,
+    WIP_GROUPS,
+    DAY_EVENTS,
+    apply_initial_work_remaining,
+)
 
-# Random daily contribution ranges per role per stage (min, max)
-MEMBER_CAPACITY_RANGES = {
-    "analyst":   {"analysis": (0.8, 1.3), "development": (0.3, 0.5), "test": (0.4, 0.8)},
-    "developer": {"analysis": (0.3, 0.6), "development": (0.8, 1.5), "test": (0.5, 0.7)},
-    "tester":    {"analysis": (0.4, 0.6), "development": (0.3, 0.8), "test": (0.8, 1.4)},
+PULL_WIP_KEYS = {
+    "ready": "analysis",
+    "analysis_done": "development",
+    "dev_done": "test",
+    "exp_ready": "exp_analysis",
+    "exp_analysis_done": "exp_development",
+    "exp_dev_done": "exp_test",
 }
 
+def _c(col) -> str:
+    """Normalize column to string."""
+    return col.value if isinstance(col, CardColumn) else str(col)
 
-COLUMN_ORDER = [
-    CardColumn.options,
-    CardColumn.ready,
-    CardColumn.analysis,
-    CardColumn.development,
-    CardColumn.test,
-    CardColumn.deployed,
+
+ACTIVE_WORK_LANES = [
+    "analysis", "development", "test",
+    "exp_analysis", "exp_development", "exp_test",
 ]
 
-ACTIVE_COLUMNS = [CardColumn.analysis, CardColumn.development, CardColumn.test]
+PIPELINE_AGE_LANES = [
+    "ready", "analysis", "analysis_done", "development", "dev_done", "test",
+    "exp_ready", "exp_analysis", "exp_analysis_done",
+    "exp_development", "exp_dev_done", "exp_test",
+]
 
-WIP_COLUMN_MAP = {
-    CardColumn.analysis: "analysis",
-    CardColumn.development: "development",
-    CardColumn.test: "test",
-}
+WORK_LANE_ORDER = [
+    "exp_analysis", "exp_analysis_done", "exp_development", "exp_dev_done", "exp_test",
+    "analysis", "analysis_done", "development", "dev_done", "test",
+]
+
+
+def _card_map(game: Game) -> dict[str, Card]:
+    return {str(c.id): c for c in game.cards}
+
+
+def _card_by_key(game: Game) -> dict[str, Card]:
+    return {c.card_key: c for c in game.cards}
+
+
+def _workers(game: Game) -> list[dict]:
+    return [dict(worker) for worker in game.team_config.get("workers", [])]
+
+
+def _set_workers(game: Game, workers: list[dict]):
+    team = dict(game.team_config)
+    team["workers"] = [dict(worker) for worker in workers]
+    game.team_config = team
+    flag_modified(game, "team_config")
+
+
+def _buffs(game: Game) -> dict:
+    return dict(game.team_config.get("buffs", {"analyst": 0, "developer": 0, "tester": 0}))
+
+
+def _set_buffs(game: Game, buffs: dict):
+    team = dict(game.team_config)
+    team["buffs"] = buffs
+    game.team_config = team
+    flag_modified(game, "team_config")
+
+
+def wip_count(game: Game, wip_key: str) -> int:
+    lanes = WIP_GROUPS.get(wip_key, [wip_key])
+    lane_set = set(lanes)
+    return sum(1 for c in game.cards if c.column in lane_set)
+
+
+def active_bar(card: Card) -> int:
+    col = card.column
+    if col in ("analysis", "exp_analysis"):
+        return 0
+    if col in ("development", "exp_development"):
+        return 1
+    if col in ("test", "exp_test"):
+        return 2
+    return -1
+
+
+def is_specialist(worker_type: str, column: str) -> bool:
+    if worker_type == "analyst" and column in ("analysis", "exp_analysis"):
+        return True
+    if worker_type == "developer" and column in ("development", "exp_development"):
+        return True
+    if worker_type == "tester" and column in ("test", "exp_test"):
+        return True
+    return False
+
+
+def can_assign_worker(game: Game, worker: dict, card: Card) -> bool:
+    if not worker or not worker.get("active"):
+        return False
+    bar = active_bar(card)
+    if bar < 0:
+        return False
+    return True
+
+
+def can_pull_to(game: Game, wip_key: str) -> bool:
+    limit = game.wip_limits.get(wip_key, 999)
+    return wip_count(game, wip_key) < limit
 
 
 async def create_game(db: AsyncSession, name: str, player_name: str) -> Game:
@@ -51,42 +131,68 @@ async def create_game(db: AsyncSession, name: str, player_name: str) -> Game:
         name=name,
         player_name=player_name,
         status=GameStatus.active,
-        current_day=1,
-        phase="event",
+        current_day=9,
+        total_days=35,
+        phase="planning",
+        work_done=False,
+        carlos_policy=False,
+        lockdown=False,
+        wip_limits=dict(INITIAL_WIP),
+        team_config={
+            "workers": [dict(w) for w in INITIAL_WORKERS],
+            "buffs": {"analyst": 0, "developer": 0, "tester": 0},
+        },
     )
     db.add(game)
     await db.flush()
 
-    # Create cards with randomized story points
+    placed_keys: set[str] = set()
+    card_by_key: dict[str, Card] = {}
+
     for i, card_def in enumerate(CARD_DEFINITIONS):
-        start_col = CardColumn(card_def["start_column"])
-        analysis_pts = random.randint(1, 5) if card_def["analysis"] > 0 else 0
-        dev_pts = random.randint(1, 7)
-        test_pts = random.randint(1, 6)
+        a, d, t = card_def["analysis"], card_def["dev"], card_def["test"]
+        col = "hidden" if card_def["type"] == "expedite" else "backlog"
+
         card = Card(
             id=uuid.uuid4(),
             game_id=game.id,
             card_key=card_def["key"],
             title=card_def["title"],
-            card_type=CardType(card_def["type"]),
-            column=start_col,
-            analysis_total=analysis_pts,
-            analysis_remaining=float(analysis_pts),
-            dev_total=dev_pts,
-            dev_remaining=float(dev_pts),
-            test_total=test_pts,
-            test_remaining=float(test_pts),
+            card_type=card_def["type"],
+            column=col,
+            analysis_total=a,
+            analysis_remaining=float(a),
+            dev_total=d,
+            dev_remaining=float(d),
+            test_total=t,
+            test_remaining=float(t),
+            val=card_def.get("val", 0),
             revenue_per_day=card_def.get("revenue", 0),
             due_day=card_def.get("due_day"),
-            penalty=card_def.get("penalty", 0),
+            appear_day=card_def.get("appear_day"),
+            buff=card_def.get("buff"),
             color=card_def["color"],
             sort_order=i,
         )
         db.add(card)
+        card_by_key[card_def["key"]] = card
 
-    # Create events
+    for lane_str, keys in INITIAL_BOARD.items():
+        for key in keys:
+            card = card_by_key[key]
+            card.column = lane_str
+            card.entered_day = 1
+            card.age = 0
+            a_rem, d_rem, t_rem = apply_initial_work_remaining(
+                card.analysis_total, card.dev_total, card.test_total, lane_str
+            )
+            card.analysis_remaining = a_rem
+            card.dev_remaining = d_rem
+            card.test_remaining = t_rem
+            placed_keys.add(key)
+
     for event_def in EVENT_DEFINITIONS:
-        event = GameEvent(
+        db.add(GameEvent(
             id=uuid.uuid4(),
             game_id=game.id,
             day=event_def["day"],
@@ -96,41 +202,16 @@ async def create_game(db: AsyncSession, name: str, player_name: str) -> Game:
             event_type=event_def["type"],
             payload=event_def["payload"],
             is_resolved=False,
-        )
-        db.add(event)
+        ))
 
     await db.commit()
-    await db.refresh(game)
     return await get_game(db, game.id)
-
-
-def _generate_member_capacities(team_config: dict) -> dict:
-    """Generate random daily contribution values for each team member per stage."""
-    capacities = {}
-    members_spec = [
-        ("analyst", "A", team_config.get("analysts", 2)),
-        ("developer", "D", team_config.get("developers", 4)),
-        ("tester", "T", team_config.get("testers", 3)),
-    ]
-    for role, prefix, count in members_spec:
-        ranges = MEMBER_CAPACITY_RANGES[role]
-        for i in range(count):
-            mid = f"{prefix}{i + 1}"
-            capacities[mid] = {
-                stage: round(random.uniform(lo, hi), 2)
-                for stage, (lo, hi) in ranges.items()
-            }
-    return capacities
 
 
 async def get_game(db: AsyncSession, game_id: uuid.UUID) -> Optional[Game]:
     result = await db.execute(
         select(Game)
-        .options(
-            selectinload(Game.cards),
-            selectinload(Game.events),
-            selectinload(Game.metrics),
-        )
+        .options(selectinload(Game.cards), selectinload(Game.events), selectinload(Game.metrics))
         .where(Game.id == game_id)
     )
     return result.scalar_one_or_none()
@@ -141,203 +222,408 @@ async def get_all_games(db: AsyncSession) -> list[Game]:
     return list(result.scalars().all())
 
 
-async def resolve_event(db: AsyncSession, game_id: uuid.UUID) -> Game:
+async def assign_worker(
+    db: AsyncSession, game_id: uuid.UUID, worker_id: str, card_id: uuid.UUID
+) -> tuple[Optional[Game], str | None]:
     game = await get_game(db, game_id)
-    if not game or game.phase != "event":
-        return game
+    if not game or game.phase != "planning" or game.work_done:
+        return game, "Cannot assign workers now"
 
-    # Get today's event
-    today_events = [e for e in game.events if e.day == game.current_day and not e.is_resolved]
-
-    for event in today_events:
-        await _apply_event(db, game, event)
-        event.is_resolved = True
-
-    # Move to capacity phase (do NOT reset day_capacity_used here — end_day already
-    # resets it to 0, and capacity_change events may have pre-consumed some capacity)
-    game.phase = "capacity"
-
-    # Generate random member capacities for today
-    team = dict(game.team_config)
-    team["member_capacities"] = _generate_member_capacities(team)
-    game.team_config = team
-
-    await db.commit()
-    return await get_game(db, game_id)
-
-
-async def _apply_event(db: AsyncSession, game: Game, event: GameEvent):
-    payload = event.payload
-
-    if event.event_type == "new_card":
-        card_key = payload.get("card_key")
-        if card_key:
-            for card in game.cards:
-                if card.card_key == card_key:
-                    card.column = CardColumn.ready
-                    break
-
-    elif event.event_type == "capacity_change":
-        # Negative delta: pre-consume capacity (reduces what's available)
-        # Positive delta: store as bonus added on top of member capacities
-        used = dict(game.day_capacity_used)
-        team = dict(game.team_config)
-        capacity_delta = payload.get("capacity_delta", {})
-        bonus = dict(team.get("capacity_bonus") or {"analysis": 0, "development": 0, "test": 0})
-        for col, delta in capacity_delta.items():
-            if delta < 0:
-                used[col] = max(0, used.get(col, 0) + abs(delta))
-            elif delta > 0 and col in bonus:
-                bonus[col] = round(bonus[col] + delta, 2)
-        game.day_capacity_used = used
-        team["capacity_bonus"] = bonus
-        game.team_config = team
-
-    elif event.event_type == "billing":
-        deadline_card_key = payload.get("deadline_card")
-        if deadline_card_key:
-            for card in game.cards:
-                if card.card_key == deadline_card_key and card.column != CardColumn.deployed:
-                    game.total_revenue -= card.penalty
-
-
-async def allocate_capacity(
-    db: AsyncSession,
-    game_id: uuid.UUID,
-    allocations: list[AllocateCapacityItem],
-) -> Game:
-    game = await get_game(db, game_id)
-    if not game or game.phase != "capacity":
-        return game
-
-    capacity_applied = {"analysis": 0.0, "development": 0.0, "test": 0.0}
-    card_map = {card.id: card for card in game.cards}
-
-    for alloc in allocations:
-        card = card_map.get(alloc.card_id)
-        if not card or card.is_blocked:
-            continue
-
-        col = card.column
-        if col == CardColumn.analysis:
-            pts = min(alloc.points, max(0.0, card.analysis_remaining))
-            card.analysis_remaining = max(0.0, card.analysis_remaining - pts)
-            capacity_applied["analysis"] += pts
-
-        elif col == CardColumn.development:
-            pts = min(alloc.points, max(0.0, card.dev_remaining))
-            card.dev_remaining = max(0.0, card.dev_remaining - pts)
-            capacity_applied["development"] += pts
-
-        elif col == CardColumn.test:
-            pts = min(alloc.points, max(0.0, card.test_remaining))
-            card.test_remaining = max(0.0, card.test_remaining - pts)
-            capacity_applied["test"] += pts
-
-    used = dict(game.day_capacity_used)
-    for role, pts in capacity_applied.items():
-        used[role] = round((used.get(role) or 0) + pts, 2)
-    game.day_capacity_used = used
-
-    await db.commit()
-    return await get_game(db, game_id)
-
-
-async def move_card(db: AsyncSession, game_id: uuid.UUID, card_id: uuid.UUID, target_column: str) -> tuple[Game, str | None]:
-    game = await get_game(db, game_id)
-    if not game or game.phase not in ("capacity", "move"):
-        return game, "Wrong game phase"
-
-    target_col = CardColumn(target_column)
+    workers = _workers(game)
+    worker = next((w for w in workers if w["id"] == worker_id), None)
     card = next((c for c in game.cards if c.id == card_id), None)
-    if not card:
-        return game, "Card not found"
+    if not worker or not card:
+        return game, "Worker or card not found"
 
-    current_col = card.column
-    current_idx = COLUMN_ORDER.index(current_col)
-    target_idx = COLUMN_ORDER.index(target_col)
+    if not can_assign_worker(game, worker, card):
+        if not worker.get("active"):
+            return game, "Worker unavailable"
+        return game, "Assignment not allowed"
 
-    # Must move exactly one step forward
-    if target_idx != current_idx + 1:
-        return game, "Can only move one column at a time"
+    wid = str(card_id)
+    if worker.get("assigned_card_id") == wid:
+        worker["assigned_card_id"] = None
+    else:
+        if worker.get("assigned_card_id"):
+            worker["assigned_card_id"] = None
+        worker["assigned_card_id"] = wid
 
-    # Check card is ready to move
-    error = _check_card_ready_to_move(card)
-    if error:
-        return game, error
-
-    # Check WIP limits (expedite bypasses)
-    if card.card_type != CardType.expedite and target_col in ACTIVE_COLUMNS:
-        wip_key = WIP_COLUMN_MAP[target_col]
-        wip_limit = game.wip_limits.get(wip_key, 999)
-        current_wip = sum(1 for c in game.cards if c.column == target_col)
-        if current_wip >= wip_limit:
-            return game, f"WIP limit reached for {wip_key} ({wip_limit} max)"
-
-    card.column = target_col
-    if target_col == CardColumn.deployed:
-        card.deployed_day = game.current_day
-
-    game.phase = "move"
+    _set_workers(game, workers)
     await db.commit()
     return await get_game(db, game_id), None
 
 
-def _check_card_ready_to_move(card: Card) -> Optional[str]:
-    col = card.column
-    if col in (CardColumn.options, CardColumn.ready):
-        return None
-    if col == CardColumn.analysis and (card.analysis_remaining or 0) > 0.01:
-        return f"Analysis not complete ({card.analysis_remaining:.1f} points remaining)"
-    elif col == CardColumn.development and (card.dev_remaining or 0) > 0.01:
-        return f"Development not complete ({card.dev_remaining:.1f} points remaining)"
-    elif col == CardColumn.test and (card.test_remaining or 0) > 0.01:
-        return f"Testing not complete ({card.test_remaining:.1f} points remaining)"
-    return None
-
-
-async def end_day(db: AsyncSession, game_id: uuid.UUID) -> Game:
+async def pull_card(
+    db: AsyncSession, game_id: uuid.UUID, card_id: uuid.UUID
+) -> tuple[Optional[Game], str | None]:
     game = await get_game(db, game_id)
-    if not game or game.phase not in ("capacity", "move"):
-        return game
+    if not game or game.phase != "planning" or game.work_done:
+        return game, "Cannot pull now"
 
-    # Calculate daily revenue from deployed cards
-    deployed_cards = [c for c in game.cards if c.column == CardColumn.deployed]
-    daily_revenue = sum(c.revenue_per_day for c in deployed_cards)
-    game.total_revenue += daily_revenue
+    card = next((c for c in game.cards if c.id == card_id), None)
+    if not card:
+        return game, "Card not found"
 
-    # Record metric
-    wip = sum(1 for c in game.cards if c.column in ACTIVE_COLUMNS)
-    throughput = sum(1 for c in game.cards if c.deployed_day == game.current_day)
-    metric = GameMetric(
+    from_col = card.column
+    to_col_str = PULL_MOVES.get(from_col)
+    if not to_col_str:
+        return game, "Card cannot be pulled from this column"
+
+    wip_key = PULL_WIP_KEYS.get(from_col)
+    if wip_key and not can_pull_to(game, wip_key):
+        return game, f"WIP limit reached for {wip_key}"
+
+    card.column = to_col_str
+    await db.commit()
+    return await get_game(db, game_id), None
+
+
+async def pull_backlog(
+    db: AsyncSession, game_id: uuid.UUID, card_type: str
+) -> tuple[Optional[Game], str | None]:
+    game = await get_game(db, game_id)
+    if not game or game.phase != "planning" or game.work_done:
+        return game, "Cannot pull now"
+
+    if not can_pull_to(game, "ready"):
+        limit = game.wip_limits.get("ready", 5)
+        return game, f"Ready WIP limit reached (max {limit})"
+
+    type_map = {"s": "standard", "f": "fixed_date", "i": "intangible"}
+    ctype = type_map.get(card_type)
+    if not ctype:
+        return game, "Invalid card type"
+
+    card = next(
+        (c for c in sorted(game.cards, key=lambda x: x.sort_order)
+         if c.column == "backlog" and c.card_type == ctype),
+        None,
+    )
+    if not card:
+        return game, f"No more {card_type.upper()} cards in backlog"
+
+    card.column = "ready"
+    card.entered_day = game.current_day
+    card.age = 0
+    await db.commit()
+    return await get_game(db, game_id), None
+
+
+async def pull_expedite(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Game], str | None]:
+    game = await get_game(db, game_id)
+    if not game or game.phase != "planning" or game.work_done:
+        return game, "Cannot pull now"
+
+    exp_ready_count = sum(1 for c in game.cards if c.column == "exp_ready")
+    if exp_ready_count >= game.wip_limits.get("expedite", 1):
+        return game, "Expedite lane is full"
+
+    card = next(
+        (c for c in sorted(game.cards, key=lambda x: x.sort_order)
+         if c.column == "exp_backlog"),
+        None,
+    )
+    if not card:
+        return game, "No expedite cards available"
+
+    card.column = "exp_ready"
+    card.entered_day = game.current_day
+    card.age = 0
+    await db.commit()
+    return await get_game(db, game_id), None
+
+
+def _roll_work(game: Game, worker: dict, card: Card) -> tuple[int, str]:
+    spec = is_specialist(worker["type"], card.column)
+    buffs = _buffs(game)
+    if spec:
+        r1, r2 = random.randint(1, 6), random.randint(1, 6)
+        work = r1 + r2 + buffs.get(worker["type"], 0)
+        return work, f"2d6: {r1}+{r2}={r1+r2}"
+    r1 = random.randint(1, 6)
+    work = r1 + buffs.get(worker["type"], 0)
+    return work, f"1d6: {r1}"
+
+
+def _advance_story(game: Game, card: Card, log: list[dict]) -> None:
+    col = card.column
+    next_col_str = ADVANCE_MAP.get(col)
+    if not next_col_str:
+        return
+
+    if next_col_str in ("deployed", "exp_deployed"):
+        card.deployed_day = game.current_day
+        _apply_deploy_bonuses(game, card, log)
+        log.append({"type": "deploy", "card_key": card.card_key, "day": game.current_day})
+    else:
+        log.append({"type": "advance", "card_key": card.card_key, "to": next_col_str})
+
+    card.column = next_col_str
+
+
+def _apply_deploy_bonuses(game: Game, card: Card, log: list[dict]) -> None:
+    if card.card_type == "fixed_date":
+        on_time = card.due_day and card.deployed_day <= card.due_day
+        if on_time and card.val > 0:
+            game.total_revenue += card.val
+            log.append({"type": "bonus", "card_key": card.card_key, "amount": card.val})
+        elif not on_time and card.val < 0:
+            game.total_revenue += card.val
+            log.append({"type": "penalty", "card_key": card.card_key, "amount": card.val})
+    elif card.card_type == "intangible" and card.buff:
+        buffs = _buffs(game)
+        buffs[card.buff] = buffs.get(card.buff, 0) + 1
+        _set_buffs(game, buffs)
+        log.append({"type": "buff", "card_key": card.card_key, "buff": card.buff})
+    elif card.card_type == "expedite":
+        on_time = card.due_day and card.deployed_day <= card.due_day
+        if on_time and card.val > 0:
+            game.total_revenue += card.val
+            log.append({"type": "bonus", "card_key": card.card_key, "amount": card.val})
+        elif card.val < 0:
+            game.total_revenue += card.val
+            log.append({"type": "penalty", "card_key": card.card_key, "amount": card.val})
+
+
+async def start_work(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Game], list[dict], str | None]:
+    game = await get_game(db, game_id)
+    if not game or game.phase != "planning":
+        return game, [], "Wrong phase"
+    if game.work_done:
+        return game, [], "Work already done today"
+
+    workers = _workers(game)
+    log: list[dict] = []
+    pending_advance: list[Card] = []
+
+    for lane in WORK_LANE_ORDER:
+        cards_in_lane = [c for c in game.cards if c.column == lane]
+        for card in cards_in_lane:
+            assigned = [w for w in workers if w.get("assigned_card_id") == str(card.id)]
+
+            if card.is_blocked and card.blocker_remaining > 0:
+                for worker in assigned:
+                    r1 = random.randint(1, 6)
+                    overflow = max(0, r1 - card.blocker_remaining)
+                    card.blocker_remaining = max(0, card.blocker_remaining - r1)
+                    log.append({
+                        "type": "work", "worker_id": worker["id"], "worker_type": worker["type"],
+                        "card_key": card.card_key, "stage": "blocker", "roll": f"1d6: {r1}", "work": r1,
+                    })
+                    if card.blocker_remaining == 0:
+                        card.is_blocked = False
+                        if overflow > 0:
+                            bar = active_bar(card)
+                            if bar == 0:
+                                card.analysis_remaining = max(0, card.analysis_remaining - overflow)
+                            elif bar == 1:
+                                card.dev_remaining = max(0, card.dev_remaining - overflow)
+                            elif bar == 2:
+                                card.test_remaining = max(0, card.test_remaining - overflow)
+                            if _stage_complete(card, bar):
+                                pending_advance.append(card)
+                continue
+
+            bar = active_bar(card)
+            if bar < 0:
+                continue
+
+            for worker in assigned:
+                work, roll_desc = _roll_work(game, worker, card)
+                if bar == 0:
+                    card.analysis_remaining = max(0, card.analysis_remaining - work)
+                elif bar == 1:
+                    card.dev_remaining = max(0, card.dev_remaining - work)
+                elif bar == 2:
+                    card.test_remaining = max(0, card.test_remaining - work)
+
+                log.append({
+                    "type": "work", "worker_id": worker["id"], "worker_type": worker["type"],
+                    "card_key": card.card_key, "stage": bar, "roll": roll_desc, "work": work,
+                })
+
+                if _stage_complete(card, bar) and card not in pending_advance:
+                    pending_advance.append(card)
+
+    for card in game.cards:
+        if card.column in PIPELINE_AGE_LANES:
+            card.age += 1
+
+    for w in workers:
+        w["assigned_card_id"] = None
+    _set_workers(game, workers)
+
+    for card in pending_advance:
+        _advance_story(game, card, log)
+
+    deployed_standard = [
+        c for c in game.cards
+        if c.column in ("deployed", "exp_deployed") and c.card_type == "standard"
+    ]
+    daily_rev = sum(c.val for c in deployed_standard)
+    game.daily_revenue = daily_rev
+    game.total_revenue += daily_rev
+    game.work_done = True
+
+    await db.commit()
+    return await get_game(db, game_id), log, None
+
+
+def _stage_complete(card: Card, bar: int) -> bool:
+    if bar == 0:
+        return card.analysis_remaining <= 0
+    if bar == 1:
+        return card.dev_remaining <= 0
+    if bar == 2:
+        return card.test_remaining <= 0
+    return False
+
+
+def _find_overdue(game: Game, day: int) -> list[Card]:
+    active_lanes = [
+        "ready", "analysis", "analysis_done", "development", "dev_done", "test",
+        "exp_backlog", "exp_ready", "exp_analysis", "exp_analysis_done",
+        "exp_development", "exp_dev_done", "exp_test",
+    ]
+    return [
+        c for c in game.cards
+        if c.column in active_lanes
+        and c.card_type in ("fixed_date", "expedite")
+        and c.due_day == day
+    ]
+
+
+def _remove_overdue(game: Game, cards: list[Card], log: list[dict]) -> None:
+    workers = _workers(game)
+    for card in cards:
+        for w in workers:
+            if w.get("assigned_card_id") == str(card.id):
+                w["assigned_card_id"] = None
+        if card.val < 0:
+            game.total_revenue += card.val
+            log.append({"type": "overdue_penalty", "card_key": card.card_key, "amount": card.val})
+        else:
+            log.append({"type": "overdue_lost", "card_key": card.card_key})
+        card.column = "removed"
+    _set_workers(game, workers)
+
+
+def _apply_blocker(game: Game, lane: str) -> None:
+    lane_map = {
+        "test": ("test", "exp_test"),
+        "development": ("development", "exp_development"),
+    }
+    std_lane, exp_lane = lane_map.get(lane, (None, None))
+    card = None
+    if std_lane:
+        card = next((c for c in game.cards if c.column == std_lane), None)
+    if not card and exp_lane:
+        card = next((c for c in game.cards if c.column == exp_lane), None)
+    if card:
+        total = 5 + random.randint(0, 2)
+        card.is_blocked = True
+        card.blocker_remaining = total
+        card.blocker_total = total
+
+
+def _apply_day_effects(game: Game, effects: list[dict]) -> None:
+    workers = _workers(game)
+    wip = dict(game.wip_limits)
+
+    for eff in effects:
+        etype = eff.get("type")
+        if etype == "workerOut":
+            wtype = eff.get("workerType")
+            w = next((w for w in workers if w["type"] == wtype and w.get("active")), None)
+            if w:
+                w["assigned_card_id"] = None
+                w["active"] = False
+        elif etype == "workerIn":
+            wtype = eff.get("workerType")
+            w = next((w for w in workers if w["type"] == wtype and not w.get("active")), None)
+            if w:
+                w["active"] = True
+        elif etype == "blocker":
+            _apply_blocker(game, eff.get("lane", "test"))
+        elif etype == "wipChange":
+            wip[eff["lane"]] = eff["value"]
+        elif etype == "carlosOn":
+            game.carlos_policy = True
+        elif etype == "carlosOff":
+            game.carlos_policy = False
+        elif etype == "lockdownOn":
+            game.lockdown = True
+
+    game.wip_limits = wip
+    flag_modified(game, "wip_limits")
+    _set_workers(game, workers)
+
+
+def _reveal_expedite(game: Game, day: int) -> None:
+    for card in game.cards:
+        if (
+            card.card_type == "expedite"
+            and card.appear_day == day
+            and card.column == "hidden"
+        ):
+            card.column = "exp_backlog"
+
+
+async def end_day(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Game], dict, str | None]:
+    game = await get_game(db, game_id)
+    if not game:
+        return game, {}, "Game not found"
+    if not game.work_done:
+        return game, {}, "Start work before ending the day"
+
+    completed_day = game.current_day
+    event_data = DAY_EVENTS.get(completed_day, {})
+    overdue = _find_overdue(game, completed_day)
+    end_log: list[dict] = []
+
+    effects = event_data.get("effects", [])
+    if effects:
+        _apply_day_effects(game, effects)
+
+    if overdue:
+        _remove_overdue(game, overdue, end_log)
+
+    wip = sum(1 for c in game.cards if c.column in ACTIVE_WORK_LANES)
+    deployed = [c for c in game.cards if c.column in ("deployed", "exp_deployed")]
+    throughput = sum(1 for c in deployed if c.deployed_day == completed_day)
+
+    db.add(GameMetric(
         id=uuid.uuid4(),
         game_id=game.id,
-        day=game.current_day,
+        day=completed_day,
         throughput=throughput,
         wip=wip,
-        daily_revenue=daily_revenue,
+        daily_revenue=game.daily_revenue,
         cumulative_revenue=game.total_revenue,
-        deployed_count=len(deployed_cards),
-    )
-    db.add(metric)
+        deployed_count=len(deployed),
+    ))
 
-    # Check if game over
-    if game.current_day >= game.total_days:
+    modal = {
+        "day": completed_day,
+        "title": event_data.get("title", ""),
+        "description": event_data.get("description", ""),
+        "overdue": [{"card_key": c.card_key, "due_day": c.due_day, "val": c.val} for c in overdue],
+        "log": end_log,
+    }
+
+    for ev in game.events:
+        if ev.day == completed_day:
+            ev.is_resolved = True
+
+    if completed_day >= game.total_days:
         game.status = GameStatus.completed
         game.phase = "completed"
     else:
         game.current_day += 1
-        game.phase = "event"
-        # Restore base team_config (temporary event bonuses expire each day)
-        game.team_config = {
-            "analysts": 2,
-            "developers": 4,
-            "testers": 3,
-            "analyst_capacity": 2,
-            "dev_capacity": 2,
-            "test_capacity": 2,
-        }
-        game.day_capacity_used = {"analysis": 0, "development": 0, "test": 0}
+        game.work_done = False
+        game.daily_revenue = 0
+        game.phase = "planning"
+        _reveal_expedite(game, game.current_day)
 
     await db.commit()
-    return await get_game(db, game_id)
+    return await get_game(db, game_id), modal, None

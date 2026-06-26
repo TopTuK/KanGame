@@ -1,133 +1,98 @@
 <template>
   <div
-    :draggable="canDrag"
-    @dragstart="onCardDragStart"
-    @dragend="onCardDragEnd"
+    @click="onCardClick"
     @dragover="onDragOver"
+    @dragenter="onDragEnter"
     @dragleave="onDragLeave"
-    @drop="onMemberDrop"
+    @drop="onDrop"
     :class="[
-      'rounded-lg border transition-all duration-200 select-none text-white',
-      cardBaseClass,
-      canDrag ? 'cursor-grab active:cursor-grabbing hover:scale-[1.02] hover:shadow-lg' : 'cursor-default opacity-80',
-      card.is_blocked ? 'opacity-50 border-dashed' : '',
-      isDragging ? 'opacity-30 scale-95' : '',
-      isActiveDropTarget && isDragOver ? 'ring-2 ring-emerald-400/80 shadow-lg shadow-emerald-950/40' : '',
+      'rounded-lg border transition-all duration-200 select-none overflow-hidden cursor-pointer',
+      cardBorderClass,
+      card.is_blocked ? 'ring-1 ring-red-500/50' : '',
+      ringClass,
     ]"
   >
-    <!-- Card header -->
-    <div :class="['px-3 py-2 rounded-t-lg flex items-start justify-between gap-1', cardHeaderClass]">
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-1.5 mb-0.5">
-          <span class="font-mono text-xs opacity-80 flex-shrink-0">{{ card.card_key }}</span>
-          <span v-if="isExpedite" class="text-xs px-1 rounded bg-red-500/50">{{ t('card.expedite') }}</span>
-          <span v-if="isFixedDate" class="text-xs px-1 rounded bg-yellow-500/50">{{ t('card.deadline') }}</span>
-        </div>
-        <div class="text-xs font-medium leading-tight truncate">{{ cardTitle(card) }}</div>
+    <div :class="['px-2 py-1.5 flex items-center justify-between gap-1', cardHeaderClass]">
+      <div class="flex items-center gap-1 min-w-0">
+        <span class="font-mono text-[10px] font-bold text-white/90">{{ card.card_key }}</span>
+        <span v-if="isExpedite" class="text-[9px] px-1 rounded bg-red-500/60 text-red-100">⚡</span>
+        <span v-else-if="isFixedDate" class="text-[9px] px-1 rounded bg-yellow-500/50 text-yellow-100">📅</span>
+        <span v-else-if="isIntangible" class="text-[9px] px-1 rounded bg-slate-500/50">⚙️</span>
       </div>
-      <span class="text-base flex-shrink-0">{{ typeIcon }}</span>
+      <span v-if="headerValue" :class="['text-[10px] font-mono font-bold', headerValueClass]">{{ headerValue }}</span>
     </div>
 
-    <!-- Progress bars + assignments -->
-    <div class="px-3 py-2 space-y-1.5 bg-black/20 rounded-b-lg">
-      <!-- Analysis -->
-      <div v-if="card.analysis_total > 0" class="flex items-center gap-2">
-        <span class="text-xs w-4 text-center opacity-60">A</span>
-        <div class="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden">
-          <div
-            class="h-full bg-violet-400 rounded-full transition-all duration-300"
-            :style="{ width: analysisPct + '%' }"
-          ></div>
+    <div :class="['px-2 pb-1 text-[10px] font-medium leading-tight text-white/75 line-clamp-2', cardBodyBgClass]">
+      {{ cardTitle(card) }}
+    </div>
+
+    <div :class="['px-2 pb-2 space-y-1', cardBodyBgClass]">
+      <div v-if="card.analysis_total > 0" class="flex items-center gap-1">
+        <span class="text-[9px] w-3 text-violet-300/70">🔍</span>
+        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
+          <div class="h-full bg-violet-400 rounded-full transition-all" :style="{ width: analysisPct + '%' }"></div>
         </div>
-        <span class="text-xs font-mono opacity-70 w-8 text-right">{{ fmtPts(card.analysis_remaining) }}</span>
+      </div>
+      <div v-if="card.dev_total > 0" class="flex items-center gap-1">
+        <span class="text-[9px] w-3 text-sky-300/70">💻</span>
+        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
+          <div class="h-full bg-sky-400 rounded-full transition-all" :style="{ width: devPct + '%' }"></div>
+        </div>
+      </div>
+      <div v-if="card.test_total > 0" class="flex items-center gap-1">
+        <span class="text-[9px] w-3 text-amber-300/70">🧪</span>
+        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
+          <div class="h-full bg-amber-400 rounded-full transition-all" :style="{ width: testPct + '%' }"></div>
+        </div>
       </div>
 
-      <!-- Dev -->
-      <div v-if="card.dev_total > 0" class="flex items-center gap-2">
-        <span class="text-xs w-4 text-center opacity-60">D</span>
-        <div class="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden">
+      <div v-if="card.is_blocked && card.blocker_remaining > 0" class="flex items-center gap-1">
+        <span class="text-[9px] w-3 text-orange-300/70">🚫</span>
+        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
           <div
-            class="h-full bg-sky-400 rounded-full transition-all duration-300"
-            :style="{ width: devPct + '%' }"
+            class="h-full bg-orange-400 rounded-full"
+            :style="{ width: blockerPct + '%' }"
           ></div>
         </div>
-        <span class="text-xs font-mono opacity-70 w-8 text-right">{{ fmtPts(card.dev_remaining) }}</span>
+        <span class="text-[9px] text-orange-300">{{ card.blocker_remaining }}</span>
       </div>
 
-      <!-- Test -->
-      <div v-if="card.test_total > 0" class="flex items-center gap-2">
-        <span class="text-xs w-4 text-center opacity-60">T</span>
-        <div class="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden">
-          <div
-            class="h-full bg-amber-400 rounded-full transition-all duration-300"
-            :style="{ width: testPct + '%' }"
-          ></div>
-        </div>
-        <span class="text-xs font-mono opacity-70 w-8 text-right">{{ fmtPts(card.test_remaining) }}</span>
-      </div>
-
-      <!-- Assigned members badges -->
-      <div v-if="assignedMembers.length > 0" class="flex flex-wrap gap-1 pt-0.5">
-        <div
-          v-for="{ member, contribution } in assignedMembers"
-          :key="member.id"
-          :class="['flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium border', memberBadgeClass(member)]"
+      <!-- Assigned worker badges — click to unassign -->
+      <div v-if="assignedWorkers.length" class="flex flex-wrap gap-0.5 pt-0.5">
+        <button
+          v-for="w in assignedWorkers"
+          :key="w.id"
+          @click.stop="store.unassignWorker(w.id)"
+          :title="`${w.id} — click to unassign`"
+          :class="[
+            'text-[9px] px-1 py-0.5 rounded font-mono flex items-center gap-0.5 border border-transparent',
+            'hover:opacity-70 hover:border-white/20 transition-opacity cursor-pointer',
+            workerBadgeCls(w.type),
+          ]"
         >
-          <span>{{ member.icon }}</span>
-          <span class="font-mono">{{ member.id }}</span>
-          <span class="opacity-70">+{{ fmtPts(contribution) }}</span>
-        </div>
+          <span class="leading-none">{{ roleIcon(w.type) }}</span>
+          <span>{{ w.id }}</span>
+        </button>
       </div>
 
-      <!-- Member drop zone (only for active columns during capacity phase) -->
+      <!-- Drop hint shown when dragging a worker over this card -->
       <div
-        v-if="isActiveDropTarget"
-        :class="[
-          'rounded border border-dashed text-center py-1.5 text-xs transition-all duration-150 mt-0.5',
-          isDragOver
-            ? 'border-emerald-400 bg-emerald-950/40 text-emerald-300'
-            : store.currentDragMember
-              ? 'border-slate-500/60 text-slate-500 bg-slate-800/20'
-              : 'border-slate-700/40 text-slate-700',
-        ]"
-        @dragover="onDragOver"
-        @dragleave="onDragLeave"
-        @drop="onMemberDrop"
+        v-if="isDragOver"
+        class="text-[9px] text-center text-emerald-300 py-0.5 rounded bg-emerald-950/40 border border-emerald-700/30"
       >
-        <template v-if="isDragOver && previewContribution > 0">
-          +{{ fmtPts(previewContribution) }} pts · {{ effLabel }}
-        </template>
-        <template v-else-if="isDragOver">
-          {{ t('card.dropHere') }}
-        </template>
-        <template v-else>
-          {{ t('card.assignMember') }}
-        </template>
+        Drop to assign
       </div>
 
-      <!-- Ready to move indicator -->
-      <div v-if="isReadyToMove && columnKey !== 'deployed'" class="flex items-center gap-1 pt-0.5">
-        <div class="w-full text-center text-xs text-emerald-400 font-medium animate-pulse">
-          {{ t('card.readyToPull') }}
-        </div>
-      </div>
+      <button
+        v-if="pullable && store.canPlan()"
+        @click.stop="store.pullCard(card.id)"
+        class="w-full mt-0.5 py-0.5 text-[9px] font-semibold rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700/40 hover:bg-emerald-800/60"
+      >
+        {{ t('card.pull') }} →
+      </button>
 
-      <!-- Fixed date info -->
-      <div v-if="card.due_day" class="text-xs flex items-center gap-1 pt-0.5">
-        <span class="opacity-60">{{ t('card.due') }}</span>
-        <span :class="dueDateClass">{{ t('card.day', { day: card.due_day }) }}</span>
-        <span v-if="card.penalty" class="opacity-60">(-${{ card.penalty }})</span>
-      </div>
-
-      <!-- Revenue info -->
-      <div v-if="card.revenue_per_day && columnKey === 'deployed'" class="text-xs text-emerald-400 flex items-center gap-1 pt-0.5">
-        <span>{{ t('card.revenuePerDay', { amount: card.revenue_per_day }) }}</span>
-        <span v-if="card.deployed_day" class="opacity-60">{{ t('card.fromDay', { day: card.deployed_day }) }}</span>
-      </div>
-
-      <!-- Blocked -->
-      <div v-if="card.is_blocked" class="text-xs text-red-400 flex items-center gap-1">
-        🔒 {{ card.blocked_reason || t('card.blocked') }}
+      <div v-if="card.due_day" class="text-[9px] text-white/50">
+        {{ t('card.due') }} {{ t('card.day', { day: card.due_day }) }}
       </div>
     </div>
   </div>
@@ -141,155 +106,151 @@ import { useGameContent } from '../composables/useGameContent.js'
 
 const { t } = useI18n()
 const { cardTitle } = useGameContent()
+const store = useGameStore()
 
 const props = defineProps({
   card: Object,
   columnKey: String,
+  pullable: Boolean,
 })
 
-const store = useGameStore()
-const isDragging = ref(false)
 const isDragOver = ref(false)
-
-const ACTIVE_COLUMNS = ['analysis', 'development', 'test']
 
 const isExpedite = computed(() => props.card.card_type === 'expedite')
 const isFixedDate = computed(() => props.card.card_type === 'fixed_date')
+const isIntangible = computed(() => props.card.card_type === 'intangible')
 
-const typeIcon = computed(() => ({
-  standard: '📦', bug: '🐛', expedite: '🚨', fixed_date: '📅', intangible: '⚙️',
-})[props.card.card_type] || '📦')
+const assignedWorkers = computed(() =>
+  store.assignedWorkersByCard[props.card.id] || []
+)
+const hasWorkers = computed(() => assignedWorkers.value.length > 0)
 
-function fmtPts(n) {
-  const v = Number(n) || 0
-  return v === Math.floor(v) ? v.toFixed(0) : v.toFixed(1)
+const isDropTarget = computed(() =>
+  store.isActiveWorkColumn(props.columnKey) && store.canPlan()
+)
+
+const isSelectedTarget = computed(() =>
+  store.selectedWorkerIds.length > 0 && isDropTarget.value
+)
+
+// Unified ring class — drag takes priority over click-selection
+const ringClass = computed(() => {
+  if (isDragOver.value) return 'ring-2 ring-emerald-400 shadow-lg shadow-emerald-900/40 scale-[1.02]'
+  if (isSelectedTarget.value) return 'ring-2 ring-sky-400'
+  if (hasWorkers.value) return 'ring-1 ring-emerald-500/40'
+  return ''
+})
+
+function fmtRub(n) {
+  return Number(n).toLocaleString('ru-RU') + ' ₽'
 }
+
+const headerValue = computed(() => {
+  if (props.card.card_type === 'standard' && props.card.val) return fmtRub(props.card.val)
+  if (isFixedDate.value || isExpedite.value) {
+    if (props.card.val > 0) return '+' + fmtRub(props.card.val)
+    if (props.card.val < 0) return fmtRub(props.card.val)
+  }
+  return ''
+})
+
+const headerValueClass = computed(() => {
+  if (props.card.val < 0) return 'text-red-300'
+  if (isExpedite.value) return 'text-amber-300'
+  return 'text-emerald-300'
+})
 
 const analysisPct = computed(() => {
   if (!props.card.analysis_total) return 100
   return ((props.card.analysis_total - props.card.analysis_remaining) / props.card.analysis_total) * 100
 })
-
 const devPct = computed(() => {
   if (!props.card.dev_total) return 100
   return ((props.card.dev_total - props.card.dev_remaining) / props.card.dev_total) * 100
 })
-
 const testPct = computed(() => {
   if (!props.card.test_total) return 100
   return ((props.card.test_total - props.card.test_remaining) / props.card.test_total) * 100
 })
-
-const isReadyToMove = computed(() => {
-  const col = props.columnKey
-  const c = props.card
-  if (col === 'options' || col === 'ready') return true
-  if (col === 'analysis') return (c.analysis_remaining || 0) <= 0.01
-  if (col === 'development') return (c.dev_remaining || 0) <= 0.01
-  if (col === 'test') return (c.test_remaining || 0) <= 0.01
-  return false
+const blockerPct = computed(() => {
+  if (!props.card.blocker_total) return 0
+  return ((props.card.blocker_total - props.card.blocker_remaining) / props.card.blocker_total) * 100
 })
 
-const canDrag = computed(() => {
-  const phase = store.game?.phase
-  if (!['capacity', 'move'].includes(phase)) return false
-  if (props.card.is_blocked) return false
-  return isReadyToMove.value
-})
-
-// Members currently assigned to THIS card
-const assignedMembers = computed(() => {
-  const result = []
-  for (const [memberId, assignment] of Object.entries(store.memberAssignments)) {
-    if (assignment.cardId === props.card.id) {
-      const member = store.members.find(m => m.id === memberId)
-      if (member) result.push({ member, contribution: assignment.contribution })
-    }
-  }
-  return result
-})
-
-// Show drop zone only for active columns during capacity phase
-const isActiveDropTarget = computed(() =>
-  store.game?.phase === 'capacity' &&
-  ACTIVE_COLUMNS.includes(props.columnKey) &&
-  !props.card.is_blocked
-)
-
-// Preview contribution when hovering with a member
-const previewContribution = computed(() => {
-  if (!store.currentDragMember) return 0
-  return store.getContribution(store.currentDragMember.id, props.columnKey)
-})
-
-const effLabel = computed(() => '')
-
-const cardBaseClass = computed(() => ({
-  blue:   'border-blue-600/60 bg-blue-900/40',
-  red:    'border-red-600/60 bg-red-900/40',
-  yellow: 'border-yellow-600/60 bg-yellow-900/40',
-  gray:   'border-slate-600/60 bg-slate-800/60',
-  orange: 'border-orange-600/60 bg-orange-900/40',
-})[props.card.color] || 'border-slate-600/60 bg-slate-800/60')
+const cardBorderClass = computed(() => ({
+  blue: 'border-blue-600/50', red: 'border-red-600/50',
+  yellow: 'border-yellow-600/50', gray: 'border-slate-600/50',
+  orange: 'border-orange-600/50',
+})[props.card.color] || 'border-slate-600/50')
 
 const cardHeaderClass = computed(() => ({
-  blue:   'bg-blue-800/50',
-  red:    'bg-red-800/50',
-  yellow: 'bg-yellow-800/50',
-  gray:   'bg-slate-700/50',
-  orange: 'bg-orange-800/50',
-})[props.card.color] || 'bg-slate-700/50')
+  blue: 'bg-blue-800/70', red: 'bg-red-800/70',
+  yellow: 'bg-yellow-800/60', gray: 'bg-slate-700/70',
+  orange: 'bg-orange-800/60',
+})[props.card.color] || 'bg-slate-700/70')
 
-const dueDateClass = computed(() => {
-  if (!store.game) return 'text-slate-400'
-  const today = store.game.current_day
-  const due = props.card.due_day
-  if (today > due) return 'text-red-400 font-bold'
-  if (today >= due - 2) return 'text-amber-400 font-semibold'
-  return 'text-slate-300'
-})
+const cardBodyBgClass = computed(() => ({
+  blue: 'bg-blue-950/60', red: 'bg-red-950/60',
+  yellow: 'bg-yellow-950/50', gray: 'bg-slate-900/60',
+  orange: 'bg-orange-950/50',
+})[props.card.color] || 'bg-slate-900/60')
 
-function memberBadgeClass(member) {
-  const map = {
-    analyst:   'bg-violet-900/60 border-violet-600/40 text-violet-200',
-    developer: 'bg-sky-900/60 border-sky-600/40 text-sky-200',
-    tester:    'bg-amber-900/60 border-amber-600/40 text-amber-200',
-  }
-  return map[member.role] || 'bg-slate-800/60 border-slate-600/40 text-slate-200'
+function roleIcon(type) {
+  return { analyst: '🔍', developer: '💻', tester: '🧪' }[type] || '👤'
 }
 
-// Card drag (move card between columns)
-function onCardDragStart(e) {
-  e.dataTransfer.setData('cardId', props.card.id)
-  e.dataTransfer.effectAllowed = 'move'
-  isDragging.value = true
+function workerBadgeCls(type) {
+  return {
+    analyst: 'bg-violet-900/70 text-violet-200',
+    developer: 'bg-sky-900/70 text-sky-200',
+    tester: 'bg-amber-900/70 text-amber-200',
+  }[type] || 'bg-slate-800 text-slate-300'
 }
 
-function onCardDragEnd() {
-  isDragging.value = false
+// ── Drag & drop ──────────────────────────────────────────────────────────────
+
+function onDragOver(event) {
+  if (!isDropTarget.value || !store.draggingWorkerId) return
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'copy'
 }
 
-// Member drop (assign team member to this card)
-function onDragOver(e) {
-  if (!isActiveDropTarget.value || !store.currentDragMember) return
-  e.preventDefault()
-  e.stopPropagation()
+function onDragEnter(event) {
+  if (!isDropTarget.value || !store.draggingWorkerId) return
+  event.preventDefault()
   isDragOver.value = true
-  e.dataTransfer.dropEffect = 'copy'
 }
 
-function onDragLeave(e) {
-  if (e.currentTarget.contains(e.relatedTarget)) return
-  isDragOver.value = false
+function onDragLeave(event) {
+  // Only clear when the cursor truly leaves the card element
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    isDragOver.value = false
+  }
 }
 
-function onMemberDrop(e) {
-  const memberId = e.dataTransfer.getData('memberId')
-  if (!memberId) return
-  e.preventDefault()
-  e.stopPropagation()
+function onDrop(event) {
   isDragOver.value = false
-  if (!isActiveDropTarget.value) return
-  store.assignMember(memberId, props.card.id, props.columnKey)
+  if (!isDropTarget.value) return
+  const workerId = draggedWorkerId(event)
+  if (workerId) {
+    event.preventDefault()
+    store.assignWorker(workerId, props.card.id)
+  }
+}
+
+function draggedWorkerId(event) {
+  const directId = event.dataTransfer.getData('workerId')
+  if (directId) return directId
+  const plain = event.dataTransfer.getData('text/plain')
+  return plain?.startsWith('worker:') ? plain.slice('worker:'.length) : ''
+}
+
+// ── Click assignment (existing flow) ────────────────────────────────────────
+
+function onCardClick() {
+  if (!store.canPlan() || store.loading) return
+  if (store.selectedWorkerIds.length > 0 && isDropTarget.value) {
+    store.assignToCard(props.card.id)
+  }
 }
 </script>

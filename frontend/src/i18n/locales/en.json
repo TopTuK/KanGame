@@ -12,7 +12,7 @@
     "classesOfService": "Classes of Service",
     "classesOfServiceDesc": "Handle expedite, fixed-date, standard, and intangible work with different policies",
     "realMetrics": "Real Metrics",
-    "realMetricsDesc": "Track throughput, WIP, cycle time, and cumulative flow across 21 game days",
+    "realMetricsDesc": "Track throughput, WIP, cycle time, and cumulative flow across days 9–35",
     "startNewGame": "Start New Game",
     "yourName": "Your Name",
     "yourNamePlaceholder": "e.g. Alex",
@@ -38,19 +38,46 @@
     "day": "Day",
     "complete": "{percent}% complete",
     "totalRevenue": "Total Revenue",
+    "revPerDay": "Rev/Day",
     "deployed": "Deployed"
   },
   "columns": {
-    "options": { "label": "Options", "description": "Backlog" },
+    "backlog": { "label": "Backlog", "description": "Options pool" },
     "ready": { "label": "Ready", "description": "Ready to pull" },
     "analysis": { "label": "Analysis", "description": "WIP: {limit}" },
+    "analysisDone": { "label": "Analysis Done", "description": "Pull → Dev" },
     "development": { "label": "Development", "description": "WIP: {limit}" },
+    "devDone": { "label": "Dev Done", "description": "Pull → Test" },
     "test": { "label": "Test", "description": "WIP: {limit}" },
-    "deployed": { "label": "Deployed", "description": "💰 Earning" },
+    "deployed": { "label": "Deployed", "description": "Earning ₽" },
+    "expBacklog": { "label": "Exp. Backlog", "description": "Hidden expedite" },
+    "expReady": { "label": "Exp. Ready", "description": "Expedite WIP: {limit}" },
+    "expAnalysis": { "label": "Exp. Analysis", "description": "" },
+    "expAnalysisDone": { "label": "Exp. A-Done", "description": "" },
+    "expDevelopment": { "label": "Exp. Dev", "description": "" },
+    "expDevDone": { "label": "Exp. D-Done", "description": "" },
+    "expTest": { "label": "Exp. Test", "description": "" },
+    "expDeployed": { "label": "Exp. Deployed", "description": "" },
+    "options": { "label": "Backlog", "description": "Backlog" },
     "dropCards": "Drop cards here"
   },
+  "board": {
+    "expediteTrack": "Expedite"
+  },
+  "pull": {
+    "title": "Pull from backlog:",
+    "standard": "Standard (S)",
+    "fixed": "Fixed-date (F)",
+    "intangible": "Intangible (I)",
+    "expedite": "Pull Expedite"
+  },
   "resources": {
-    "title": "👥 Resources",
+    "planning": "Planning phase",
+    "planningHint": "Drag one worker onto a card, or click one or more workers then click a card. Pull cards on the board, then Start Work.",
+    "workDone": "Work complete",
+    "endDayHint": "Click End Day to see events and advance to the next day.",
+    "unavailable": "Unavailable",
+    "startWork": "▶ Start Work",
     "day": "Day {day}",
     "dragHint": "Drag a resource icon onto a task",
     "assignment": "Resource assignment",
@@ -86,17 +113,22 @@
     "tester": "Tester {n}"
   },
   "card": {
-    "expedite": "⚡ EXPEDITE",
-    "deadline": "📅 DEADLINE",
+    "expedite": "EXPEDITE",
+    "deadline": "DEADLINE",
     "dropHere": "Drop here",
     "assignMember": "+ assign member",
     "ptsEfficiency": "+{pts} pts · {eff}",
-    "readyToPull": "✓ Ready to pull →",
+    "pull": "Pull",
     "due": "Due:",
     "day": "Day {day}",
+    "day_short": "day",
     "revenuePerDay": "💰 ${amount}/day",
     "fromDay": "from day {day}",
-    "blocked": "Blocked"
+    "blocked": "Blocked",
+    "deployBonus": "Deploy bonus: ${amount}",
+    "onTime": "(on time)",
+    "bonusEarned": "bonus earned",
+    "age": "{days}d deployed"
   },
   "metrics": {
     "title": "Metrics",
@@ -109,7 +141,6 @@
     "expedite": "Expedite",
     "fixedDate": "Fixed Date",
     "intangible": "Intangible",
-    "bug": "Bug",
     "revenueByDay": "Revenue by Day",
     "noMetrics": "Metrics appear after each day ends"
   },
@@ -132,7 +163,7 @@
   "eventModal": {
     "day": "DAY",
     "loading": "Loading…",
-    "gotIt": "Got it! Start Day {day} →"
+    "gotIt": "Got it"
   },
   "eventTypes": {
     "info": "📋 Information",
@@ -148,8 +179,8 @@
     "cardsInProgress": "Cards Still In Progress",
     "avgThroughput": "Avg Throughput/Day",
     "dailyRevenue": "Daily Revenue Over Time",
-    "day1": "Day 1",
-    "day21": "Day 21",
+    "day9": "Day 9",
+    "day35": "Day 35",
     "dayTooltip": "Day {day}: ${amount}",
     "backHome": "← Back to Home",
     "newGame": "New Game 🚀",
@@ -164,10 +195,30 @@
     "completed": "completed"
   },
   "phase": {
+    "planning": "planning",
+    "endDay": "end day",
+    "completed": "completed",
     "event": "event",
     "capacity": "capacity",
-    "move": "move",
-    "completed": "completed"
+    "move": "move"
+  },
+  "help": {
+    "title": "Welcome to KanGame",
+    "intro": "You start on Day 9 with stories already in progress. Each day: assign workers, pull cards, Start Work, then End Day.",
+    "pull": "Pull Standard/Fixed/Intangible stories from backlog into Ready",
+    "assign": "Click one or more workers, then click a card in Analysis, Development, or Test",
+    "startWork": "Start Work rolls dice (2d6 specialist, 1d6 cross-role) and advances completed stages",
+    "endDay": "End Day applies events, checks deadlines, and advances the calendar",
+    "f1deadline": "Remember: F1 must be deployed by end of Day 15!",
+    "gotIt": "Let's play!"
+  },
+  "workLog": {
+    "title": "Work Log",
+    "empty": "No work was performed.",
+    "close": "Close"
+  },
+  "endDay": {
+    "overdueTitle": "Overdue stories removed from board:"
   },
   "errors": {
     "gameNotFound": "Game not found",
@@ -179,120 +230,6 @@
     "testingIncomplete": "Testing not complete ({points} points remaining)",
     "wipLimit": "WIP limit reached for {column} ({limit} max)"
   },
-  "cards": {
-    "S1": { "title": "Mobile Push Notifications" },
-    "S2": { "title": "User Profile Dashboard" },
-    "S3": { "title": "Search & Filter" },
-    "S4": { "title": "Analytics Dashboard" },
-    "S5": { "title": "Email Notifications" },
-    "S6": { "title": "API Rate Limiting" },
-    "S7": { "title": "Dark Mode" },
-    "S8": { "title": "Export to CSV" },
-    "S9": { "title": "Two-Factor Authentication" },
-    "S10": { "title": "Bulk Import" },
-    "S11": { "title": "Real-time Collaboration" },
-    "S12": { "title": "Audit Log" },
-    "S13": { "title": "Webhook Integration" },
-    "S14": { "title": "Role-based Permissions" },
-    "S15": { "title": "Offline Mode" },
-    "S16": { "title": "Custom Reports" },
-    "F1": { "title": "GDPR Compliance Update" },
-    "F2": { "title": "Year-end Reporting Feature" },
-    "E1": { "title": "Critical Security Patch" },
-    "E2": { "title": "Production Outage Fix" },
-    "I1": { "title": "Test Automation Framework" },
-    "I2": { "title": "CI/CD Pipeline Improvement" },
-    "I3": { "title": "Database Index Optimization" },
-    "I4": { "title": "Code Refactoring Sprint" },
-    "B1": { "title": "Login Crash on iOS" },
-    "B2": { "title": "Data Loss on Save" },
-    "B3": { "title": "Memory Leak in Reports" },
-    "B4": { "title": "Broken Export Feature" }
-  },
-  "events": {
-    "start": {
-      "title": "Welcome to the Kanban Game!",
-      "description": "Your team is ready to deliver software features using Kanban.\n\nTeam capacity per day:\n• 2 Analysts → 4 analysis points\n• 3 Developers → 6 dev points\n• 2 Testers → 4 test points\n\nWIP Limits:\n• Analysis: 3 cards max\n• Development: 5 cards max\n• Test: 3 cards max\n\nPull cards from right to left. Assign capacity each day. Deploy to earn revenue!"
-    },
-    "pull_s8": {
-      "title": "Product Owner Priority",
-      "description": "The Product Owner has reviewed the backlog.\n\nFeature S8 (Export to CSV) and S9 (Two-Factor Authentication) are already in Analysis — the team has been working on them. Keep the flow moving!"
-    },
-    "billing_1": {
-      "title": "💰 Billing Cycle 1",
-      "description": "End of billing cycle!\n\nRevenue is calculated based on deployed features.\nEach standard card earns $100/day.\nEach fixed-date card earns $150/day.\n\nKeep delivering to increase daily revenue!"
-    },
-    "bug_b1": {
-      "title": "🐛 Bug Discovered!",
-      "description": "QA has reported a critical bug in production!\n\nBug B1 (Login Crash on iOS) has been added to the Ready queue.\n\nBugs don't generate revenue but must be fixed. An unresolved bug costs the team reputation — prioritize fixing it!"
-    },
-    "sick_dev": {
-      "title": "🤒 Developer Out Sick",
-      "description": "One of your developers is sick today!\n\nDevelopment capacity is reduced by 1 point today (5 → 4).\n\nPlan your work accordingly and prioritize the most important cards."
-    },
-    "billing_2": {
-      "title": "💰 Billing Cycle 2",
-      "description": "End of billing cycle! Revenue calculated from all deployed features."
-    },
-    "expedite_e1": {
-      "title": "🚨 Expedite Request!",
-      "description": "URGENT! A critical security vulnerability has been discovered!\n\nCard E1 (Critical Security Patch) has been added to Ready.\n\nExpedite cards:\n• Bypass ALL WIP limits\n• Must be treated as highest priority\n• Move to Analysis immediately!\n\nOnly ONE expedite card can be in flight at a time."
-    },
-    "cross_train": {
-      "title": "📚 Cross-Training Opportunity",
-      "description": "The team has agreed to cross-train today!\n\nAn analyst helps in development: +1 dev capacity today.\nBut analysis capacity decreases by 1.\n\nTotal: Analysis -1, Development +1"
-    },
-    "billing_3": {
-      "title": "💰 Billing Cycle 3",
-      "description": "End of billing cycle! Revenue calculated from all deployed features."
-    },
-    "bug_b2": {
-      "title": "🐛 Another Bug!",
-      "description": "Another bug has been reported by customers!\n\nBug B2 (Data Loss on Save) has been added to the Ready queue.\n\nThis is a HIGH priority bug — data loss affects customer trust. Consider pulling it into development soon."
-    },
-    "tech_debt": {
-      "title": "⚙️ Technical Debt",
-      "description": "The team has identified critical technical debt!\n\nCard I1 (Test Automation Framework) has been added to Ready.\n\nIntangible cards don't generate direct revenue but improve team efficiency. Completing I1 will increase test capacity by 1 permanently!"
-    },
-    "billing_4_deadline": {
-      "title": "💰 Billing Cycle 4 — Fixed Date Deadline!",
-      "description": "End of billing cycle!\n\n⚠️ DEADLINE CHECK: Feature F1 (GDPR Compliance Update) was due today!\n\nIf F1 has not been deployed, a $500 penalty has been applied.\nRegulatory deadlines must be met!"
-    },
-    "production_block": {
-      "title": "🔒 Production Incident",
-      "description": "A production incident occurred overnight but was resolved by morning.\n\nThe on-call team handled it — no impact to today's capacity.\n\nHowever, all developers must attend a post-mortem meeting after standup. No special capacity changes today, but plan carefully!"
-    },
-    "overtime": {
-      "title": "💪 Team Overtime",
-      "description": "The team has agreed to work overtime today to catch up!\n\n+1 to ALL capacities today:\n• Analysis: +1 (total 5)\n• Development: +1 (total 7)\n• Test: +1 (total 5)\n\nUse this capacity wisely — it's a one-time boost!"
-    },
-    "billing_5": {
-      "title": "💰 Billing Cycle 5",
-      "description": "End of billing cycle! Revenue calculated from all deployed features."
-    },
-    "bug_b3": {
-      "title": "🐛 Bug Reported!",
-      "description": "Users are reporting a memory leak!\n\nBug B3 (Memory Leak in Reports) has been added to Ready.\n\nThis bug is causing performance degradation for all users. Fix it soon to maintain customer satisfaction."
-    },
-    "expedite_e2": {
-      "title": "🚨 New Expedite!",
-      "description": "Emergency! A production outage has been reported!\n\nCard E2 (Production Outage Fix) has been added to Ready.\n\nThis expedite card must be prioritized immediately.\nRemember: only one expedite card in flight at a time!"
-    },
-    "billing_6_deadline2": {
-      "title": "💰 Billing Cycle 6 — Fixed Date Deadline!",
-      "description": "End of billing cycle!\n\n⚠️ DEADLINE CHECK: Feature F2 (Year-end Reporting) was due today!\n\nIf F2 has not been deployed, a $300 penalty has been applied.\nFinal stretch — only 3 days left!"
-    },
-    "focus": {
-      "title": "🎯 Final Sprint",
-      "description": "Management has cleared all meetings for the last 3 days!\n\n+1 development capacity today and tomorrow.\nDevelopment: +1 (total 7)\n\nPush to get those last features deployed!"
-    },
-    "all_hands": {
-      "title": "🚀 All Hands on Deck",
-      "description": "Last day before final billing! Everyone is focused on delivery.\n\n+1 to ALL capacities:\n• Analysis: +1\n• Development: +1\n• Test: +1\n\nMake it count!"
-    },
-    "game_over": {
-      "title": "🏁 Game Over — Final Day!",
-      "description": "The simulation has ended!\n\nFinal billing cycle complete. Your total score is based on:\n• Revenue from deployed features\n• Penalties for missed deadlines\n• Cards in flight (WIP) deductions\n\nClick 'End Day' to see your final score!"
-    }
-  }
+  "cards": {},
+  "events": {}
 }

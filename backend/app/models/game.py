@@ -15,12 +15,24 @@ class GameStatus(str, enum.Enum):
 
 
 class CardColumn(str, enum.Enum):
-    options = "options"
+    backlog = "backlog"
     ready = "ready"
     analysis = "analysis"
+    analysis_done = "analysis_done"
     development = "development"
+    dev_done = "dev_done"
     test = "test"
     deployed = "deployed"
+    hidden = "hidden"
+    exp_backlog = "exp_backlog"
+    exp_ready = "exp_ready"
+    exp_analysis = "exp_analysis"
+    exp_analysis_done = "exp_analysis_done"
+    exp_development = "exp_development"
+    exp_dev_done = "exp_dev_done"
+    exp_test = "exp_test"
+    exp_deployed = "exp_deployed"
+    removed = "removed"
 
 
 class CardType(str, enum.Enum):
@@ -38,27 +50,29 @@ class Game(Base):
     name: Mapped[str] = mapped_column(String(100))
     player_name: Mapped[str] = mapped_column(String(100))
     status: Mapped[GameStatus] = mapped_column(SAEnum(GameStatus), default=GameStatus.active)
-    current_day: Mapped[int] = mapped_column(Integer, default=1)
-    total_days: Mapped[int] = mapped_column(Integer, default=21)
+    current_day: Mapped[int] = mapped_column(Integer, default=9)
+    total_days: Mapped[int] = mapped_column(Integer, default=35)
     total_revenue: Mapped[int] = mapped_column(Integer, default=0)
-    phase: Mapped[str] = mapped_column(String(50), default="event")
+    daily_revenue: Mapped[int] = mapped_column(Integer, default=0)
+    phase: Mapped[str] = mapped_column(String(50), default="planning")
+    work_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    carlos_policy: Mapped[bool] = mapped_column(Boolean, default=False)
+    lockdown: Mapped[bool] = mapped_column(Boolean, default=False)
     team_config: Mapped[dict] = mapped_column(JSON, default=lambda: {
-        "analysts": 2,
-        "developers": 4,
-        "testers": 3,
-        "analyst_capacity": 2,
-        "dev_capacity": 2,
-        "test_capacity": 2
+        "workers": [],
+        "buffs": {"analyst": 0, "developer": 0, "tester": 0},
     })
     wip_limits: Mapped[dict] = mapped_column(JSON, default=lambda: {
+        "ready": 5,
         "analysis": 3,
         "development": 5,
-        "test": 3
+        "test": 3,
+        "expedite": 1,
     })
     day_capacity_used: Mapped[dict] = mapped_column(JSON, default=lambda: {
         "analysis": 0,
         "development": 0,
-        "test": 0
+        "test": 0,
     })
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -75,8 +89,8 @@ class Card(Base):
     game_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("games.id"))
     card_key: Mapped[str] = mapped_column(String(10))
     title: Mapped[str] = mapped_column(String(200))
-    card_type: Mapped[CardType] = mapped_column(SAEnum(CardType))
-    column: Mapped[CardColumn] = mapped_column(SAEnum(CardColumn), default=CardColumn.options)
+    card_type: Mapped[str] = mapped_column(String(30))
+    column: Mapped[str] = mapped_column(String(40), default=CardColumn.backlog.value)
     analysis_total: Mapped[int] = mapped_column(Integer, default=0)
     analysis_remaining: Mapped[float] = mapped_column(Float, default=0.0)
     dev_total: Mapped[int] = mapped_column(Integer, default=0)
@@ -84,11 +98,19 @@ class Card(Base):
     test_total: Mapped[int] = mapped_column(Integer, default=0)
     test_remaining: Mapped[float] = mapped_column(Float, default=0.0)
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    blocker_remaining: Mapped[int] = mapped_column(Integer, default=0)
+    blocker_total: Mapped[int] = mapped_column(Integer, default=0)
     blocked_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    val: Mapped[int] = mapped_column(Integer, default=0)
     revenue_per_day: Mapped[int] = mapped_column(Integer, default=0)
+    deployment_bonus: Mapped[int] = mapped_column(Integer, default=0)
     due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    appear_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty: Mapped[int] = mapped_column(Integer, default=0)
+    buff: Mapped[str | None] = mapped_column(String(20), nullable=True)
     deployed_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    entered_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age: Mapped[int] = mapped_column(Integer, default=0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     color: Mapped[str] = mapped_column(String(20), default="blue")
 

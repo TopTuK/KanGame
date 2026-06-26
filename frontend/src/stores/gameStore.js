@@ -2,24 +2,38 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { gamesApi } from '../services/api.js'
 
+const STANDARD_COLUMNS = [
+  'backlog', 'ready', 'analysis', 'analysis_done',
+  'development', 'dev_done', 'test', 'deployed',
+]
+const EXPEDITE_COLUMNS = [
+  'exp_backlog', 'exp_ready', 'exp_analysis', 'exp_analysis_done',
+  'exp_development', 'exp_dev_done', 'exp_test', 'exp_deployed',
+]
+const PULLABLE = new Set([
+  'ready', 'analysis_done', 'dev_done',
+  'exp_ready', 'exp_analysis_done', 'exp_dev_done',
+])
+const ACTIVE_WORK = new Set([
+  'analysis', 'development', 'test',
+  'exp_analysis', 'exp_development', 'exp_test',
+])
+
 export const useGameStore = defineStore('game', () => {
   const game = ref(null)
   const loading = ref(false)
   const error = ref(null)
-
-  // Member drag state — shared so cards can show drop previews
-  const currentDragMember = ref(null)
-
-  // Pending assignments: memberId → { cardId, cardColumn, contribution }
-  const memberAssignments = ref({})
-
-  // ── Computed ──────────────────────────────────────────────────────────
+  const selectedWorkerIds = ref([])
+  const draggingWorkerId = ref(null)
+  const workLog = ref([])
+  const endDayModal = ref(null)
+  const showWorkLog = ref(false)
 
   const cardsByColumn = computed(() => {
     if (!game.value) return {}
     const map = {}
-    const columns = ['options', 'ready', 'analysis', 'development', 'test', 'deployed']
-    for (const col of columns) {
+    const all = [...STANDARD_COLUMNS, ...EXPEDITE_COLUMNS, 'hidden', 'removed']
+    for (const col of all) {
       map[col] = game.value.cards
         .filter(c => c.column === col)
         .sort((a, b) => a.sort_order - b.sort_order)
@@ -27,123 +41,47 @@ export const useGameStore = defineStore('game', () => {
     return map
   })
 
-  const todayEvent = computed(() => {
-    if (!game.value) return null
-    return game.value.events.find(
-      e => e.day === game.value.current_day && !e.is_resolved
-    ) || null
-  })
-
   const isGameOver = computed(() => game.value?.status === 'completed')
 
-  const teamCapacity = computed(() => {
-    if (!game.value) return { analysis: 0, development: 0, test: 0 }
-    const cfg = game.value.team_config
-    const memberCaps = cfg.member_capacities
-    const bonus = cfg.capacity_bonus || { analysis: 0, development: 0, test: 0 }
-    if (!memberCaps) {
-      return {
-        analysis: (cfg.analyst_capacity || 2) * (cfg.analysts || 2) + (bonus.analysis || 0),
-        development: (cfg.dev_capacity || 2) * (cfg.developers || 4) + (bonus.development || 0),
-        test: (cfg.test_capacity || 2) * (cfg.testers || 3) + (bonus.test || 0),
+  const workers = computed(() => game.value?.team_config?.workers || [])
+
+  const assignedWorkersByCard = computed(() => {
+    const map = {}
+    for (const w of workers.value) {
+      if (w.assigned_card_id) {
+        if (!map[w.assigned_card_id]) map[w.assigned_card_id] = []
+        map[w.assigned_card_id].push(w)
       }
     }
-    // Sum primary-role capacities only: analysts→analysis, devs→development, testers→test
-    let analysis = 0, development = 0, test = 0
-    for (let i = 0; i < (cfg.analysts || 2); i++) analysis += memberCaps[`A${i + 1}`]?.analysis || 0
-    for (let i = 0; i < (cfg.developers || 4); i++) development += memberCaps[`D${i + 1}`]?.development || 0
-    for (let i = 0; i < (cfg.testers || 3); i++) test += memberCaps[`T${i + 1}`]?.test || 0
-    return {
-      analysis: Math.round((analysis + (bonus.analysis || 0)) * 100) / 100,
-      development: Math.round((development + (bonus.development || 0)) * 100) / 100,
-      test: Math.round((test + (bonus.test || 0)) * 100) / 100,
-    }
-  })
-
-  const capacityRemaining = computed(() => {
-    if (!game.value) return { analysis: 0, development: 0, test: 0 }
-    const used = game.value.day_capacity_used
-    const total = teamCapacity.value
-    return {
-      analysis: Math.max(0, total.analysis - (used.analysis || 0)),
-      development: Math.max(0, total.development - (used.development || 0)),
-      test: Math.max(0, total.test - (used.test || 0)),
-    }
+    return map
   })
 
   const wipCounts = computed(() => {
     if (!game.value) return {}
     const cards = game.value.cards
+    const count = (cols) => cards.filter(c => cols.includes(c.column)).length
     return {
-      analysis: cards.filter(c => c.column === 'analysis').length,
-      development: cards.filter(c => c.column === 'development').length,
-      test: cards.filter(c => c.column === 'test').length,
+      ready: count(['ready']),
+      analysis: count(['analysis', 'analysis_done']),
+      development: count(['development', 'dev_done']),
+      test: count(['test']),
+      exp_analysis: count(['exp_analysis', 'exp_analysis_done']),
+      exp_development: count(['exp_development', 'exp_dev_done']),
+      exp_test: count(['exp_test']),
     }
   })
 
-  // Individual team members derived from team_config
-  const members = computed(() => {
-    if (!game.value) return []
-    const cfg = game.value.team_config
-    const memberCaps = cfg.member_capacities || {}
-    const list = []
-    for (let i = 0; i < (cfg.analysts || 2); i++) {
-      const id = `A${i + 1}`
-      list.push({ id, role: 'analyst', name: `Analyst ${i + 1}`, icon: '🔬', color: 'violet', capacity: memberCaps[id]?.analysis ?? 2 })
-    }
-    for (let i = 0; i < (cfg.developers || 4); i++) {
-      const id = `D${i + 1}`
-      list.push({ id, role: 'developer', name: `Dev ${i + 1}`, icon: '💻', color: 'sky', capacity: memberCaps[id]?.development ?? 2 })
-    }
-    for (let i = 0; i < (cfg.testers || 3); i++) {
-      const id = `T${i + 1}`
-      list.push({ id, role: 'tester', name: `Tester ${i + 1}`, icon: '🧪', color: 'amber', capacity: memberCaps[id]?.test ?? 2 })
-    }
-    return list
-  })
-
-  // Aggregated pending points per card (before applying to backend)
-  const pendingAllocations = computed(() => {
-    const totals = {}
-    for (const [, { cardId, cardColumn, contribution }] of Object.entries(memberAssignments.value)) {
-      if (!totals[cardId]) totals[cardId] = { column: cardColumn, points: 0 }
-      totals[cardId].points = Math.round((totals[cardId].points + contribution) * 100) / 100
-    }
-    return totals
-  })
-
-  const hasAssignments = computed(() => Object.keys(memberAssignments.value).length > 0)
-
-  // ── Member assignment helpers ─────────────────────────────────────────
-
-  function getContribution(memberId, cardColumn) {
-    const memberCaps = game.value?.team_config?.member_capacities
-    if (memberCaps?.[memberId]) return memberCaps[memberId][cardColumn] || 0
-    // Fallback for before resolve_event (event phase)
-    const member = members.value.find(m => m.id === memberId)
-    if (!member) return 0
-    const FALLBACK = { analyst: { analysis: 1.0, development: 0.4, test: 0.6 }, developer: { analysis: 0.5, development: 1.2, test: 0.6 }, tester: { analysis: 0.5, development: 0.6, test: 1.1 } }
-    return FALLBACK[member.role]?.[cardColumn] ?? 0
+  function isPullableColumn(col) {
+    return PULLABLE.has(col)
   }
 
-  function assignMember(memberId, cardId, cardColumn) {
-    const member = members.value.find(m => m.id === memberId)
-    if (!member) return
-    const contribution = getContribution(memberId, cardColumn)
-    memberAssignments.value = { ...memberAssignments.value, [memberId]: { cardId, cardColumn, contribution } }
+  function isActiveWorkColumn(col) {
+    return ACTIVE_WORK.has(col)
   }
 
-  function unassignMember(memberId) {
-    const copy = { ...memberAssignments.value }
-    delete copy[memberId]
-    memberAssignments.value = copy
+  function canPlan() {
+    return game.value?.phase === 'planning' && !game.value?.work_done
   }
-
-  function clearAssignments() {
-    memberAssignments.value = {}
-  }
-
-  // ── Actions ───────────────────────────────────────────────────────────
 
   async function loadGame(id) {
     loading.value = true
@@ -151,7 +89,7 @@ export const useGameStore = defineStore('game', () => {
     try {
       const res = await gamesApi.get(id)
       game.value = res.data
-      clearAssignments()
+      clearSelectedWorkers()
     } catch (e) {
       error.value = e.message
     } finally {
@@ -159,12 +97,41 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  async function resolveEvent() {
-    if (!game.value) return
+  function selectWorker(workerId) {
+    if (!canPlan() || loading.value) return
+    const w = workers.value.find(x => x.id === workerId)
+    if (!w?.active || w.assigned_card_id) return
+    selectedWorkerIds.value = selectedWorkerIds.value.includes(workerId)
+      ? selectedWorkerIds.value.filter(id => id !== workerId)
+      : [...selectedWorkerIds.value, workerId]
+  }
+
+  function clearSelectedWorkers() {
+    selectedWorkerIds.value = []
+  }
+
+  function startDragWorker(workerId) {
+    if (!canPlan() || loading.value) return
+    const w = workers.value.find(x => x.id === workerId)
+    if (!w?.active) return
+    draggingWorkerId.value = workerId
+    clearSelectedWorkers()
+  }
+
+  function stopDragWorker() {
+    draggingWorkerId.value = null
+  }
+
+  async function assignWorker(workerId, cardId, options = {}) {
+    const { clearSelection = true } = options
+    if (!workerId || !game.value || !canPlan() || loading.value) return
     loading.value = true
+    error.value = null
+    if (clearSelection) clearSelectedWorkers()
     try {
-      const res = await gamesApi.resolveEvent(game.value.id)
+      const res = await gamesApi.assignWorker(game.value.id, workerId, cardId)
       game.value = res.data
+      draggingWorkerId.value = null
     } catch (e) {
       error.value = e.response?.data?.detail || e.message
     } finally {
@@ -172,40 +139,88 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  async function allocateCapacity(allocations) {
-    if (!game.value) return
-    loading.value = true
-    try {
-      const res = await gamesApi.allocate(game.value.id, allocations)
-      game.value = res.data
-    } catch (e) {
-      error.value = e.response?.data?.detail || e.message
-    } finally {
-      loading.value = false
-    }
+  async function unassignWorker(workerId) {
+    const w = workers.value.find(x => x.id === workerId)
+    if (!w?.assigned_card_id) return
+    return assignWorker(workerId, w.assigned_card_id)
   }
 
-  async function applyMemberAssignments() {
-    const allocs = Object.entries(pendingAllocations.value)
-      .filter(([, { points }]) => points > 0)
-      .map(([card_id, { points }]) => ({ card_id, points }))
-    if (!allocs.length) return
-    await allocateCapacity(allocs)
-    clearAssignments()
-  }
-
-  async function moveCard(cardId, targetColumn) {
-    if (!game.value) return null
+  async function assignToCard(cardId) {
+    if (!selectedWorkerIds.value.length || !game.value || !canPlan() || loading.value) return
+    const workerIds = [...selectedWorkerIds.value]
+    clearSelectedWorkers()
     loading.value = true
     error.value = null
     try {
-      const res = await gamesApi.moveCard(game.value.id, cardId, targetColumn)
-      game.value = res.data
-      return null
+      for (const workerId of workerIds) {
+        const worker = workers.value.find(w => w.id === workerId)
+        if (worker?.assigned_card_id === cardId) continue
+        const res = await gamesApi.assignWorker(game.value.id, workerId, cardId)
+        game.value = res.data
+      }
+      clearSelectedWorkers()
+      draggingWorkerId.value = null
     } catch (e) {
-      const msg = e.response?.data?.detail || e.message
-      error.value = msg
-      return msg
+      error.value = e.response?.data?.detail || e.message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function pullCard(cardId) {
+    if (!game.value) return
+    loading.value = true
+    error.value = null
+    try {
+      const res = await gamesApi.pullCard(game.value.id, cardId)
+      game.value = res.data
+    } catch (e) {
+      error.value = e.response?.data?.detail || e.message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function pullBacklog(cardType) {
+    if (!game.value) return
+    loading.value = true
+    error.value = null
+    try {
+      const res = await gamesApi.pullBacklog(game.value.id, cardType)
+      game.value = res.data
+    } catch (e) {
+      error.value = e.response?.data?.detail || e.message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function pullExpedite() {
+    if (!game.value) return
+    loading.value = true
+    error.value = null
+    try {
+      const res = await gamesApi.pullExpedite(game.value.id)
+      game.value = res.data
+    } catch (e) {
+      error.value = e.response?.data?.detail || e.message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function startWork() {
+    if (!game.value) return
+    loading.value = true
+    error.value = null
+    try {
+      const res = await gamesApi.startWork(game.value.id)
+      game.value = res.data.game
+      workLog.value = res.data.log || []
+      showWorkLog.value = true
+      clearSelectedWorkers()
+    } catch (e) {
+      error.value = e.response?.data?.detail || e.message
     } finally {
       loading.value = false
     }
@@ -214,10 +229,13 @@ export const useGameStore = defineStore('game', () => {
   async function endDay() {
     if (!game.value) return
     loading.value = true
+    error.value = null
     try {
       const res = await gamesApi.endDay(game.value.id)
-      game.value = res.data
-      clearAssignments()
+      game.value = res.data.game
+      endDayModal.value = res.data.modal
+      showWorkLog.value = false
+      workLog.value = []
     } catch (e) {
       error.value = e.response?.data?.detail || e.message
     } finally {
@@ -225,13 +243,23 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function dismissEndDayModal() {
+    endDayModal.value = null
+  }
+
+  function dismissWorkLog() {
+    showWorkLog.value = false
+  }
+
   return {
     game, loading, error,
-    cardsByColumn, todayEvent, isGameOver,
-    teamCapacity, capacityRemaining, wipCounts,
-    members, memberAssignments, pendingAllocations, hasAssignments,
-    currentDragMember,
-    getContribution, assignMember, unassignMember, clearAssignments, applyMemberAssignments,
-    loadGame, resolveEvent, allocateCapacity, moveCard, endDay,
+    selectedWorkerIds, draggingWorkerId, workLog, showWorkLog, endDayModal,
+    cardsByColumn, isGameOver, workers, assignedWorkersByCard, wipCounts,
+    isPullableColumn, isActiveWorkColumn, canPlan,
+    loadGame, selectWorker, clearSelectedWorkers, startDragWorker, stopDragWorker,
+    assignWorker, unassignWorker, assignToCard,
+    pullCard, pullBacklog, pullExpedite,
+    startWork, endDay, dismissEndDayModal, dismissWorkLog,
+    STANDARD_COLUMNS, EXPEDITE_COLUMNS,
   }
 })
