@@ -14,7 +14,8 @@ An interactive web simulation of Kanban methodology, inspired by [getKanban®](h
 - ⚡ **Classes of service** — Standard, expedite, fixed-date, and intangible cards with distinct economic effects
 - 📅 **Daily gameplay loop** — Pull cards, assign resources, start work, review the work log, and end the day
 - 📊 **Metrics** — Track throughput, WIP, deployed work, daily revenue, and cumulative revenue
-- 💾 **Persistent games** — Save and resume games via PostgreSQL
+- 🔐 **Authentication** — Sign in with your organization's OIDC account before starting or resuming a game
+- 💾 **Persistent, per-user games** — Save and resume your own games via PostgreSQL; each player only sees their own
 - 🌐 **Localization** — Russian and English UI; Russian is the default; switch language from the header selector (preference saved in the browser)
 
 ---
@@ -66,12 +67,24 @@ The UI never encodes game rules. It renders server state and sends player action
 
 | Layer | Responsibility |
 |-------|----------------|
-| **API routes** (`api/routes/games.py`) | HTTP endpoints, validation, error handling |
-| **Schemas** (`schemas/game.py`) | Pydantic request/response DTOs |
-| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, dice rolls, revenue, events |
+| **API routes** (`api/routes/games.py`) | HTTP endpoints, validation, error handling — every route requires a signed-in user and is scoped to their own games |
+| **Auth routes** (`api/routes/auth.py`) | OIDC login redirect, provider callback, current-user lookup, logout |
+| **Schemas** (`schemas/game.py`, `schemas/user.py`) | Pydantic request/response DTOs |
+| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, dice rolls, revenue, events; every game lookup is filtered by owner |
 | **Data definitions** (`data/cards.py`) | Static card deck and daily event catalog |
-| **Models** (`models/game.py`) | SQLAlchemy ORM entities |
-| **Core** (`core/`) | Config, async DB session factory |
+| **Models** (`models/game.py`, `models/user.py`) | SQLAlchemy ORM entities |
+| **Core** (`core/`) | Config, async DB session factory, OIDC client (`oauth.py`), `get_current_user` dependency (`auth.py`) |
+
+### 🔐 Authentication
+
+KanGame uses a **backend-driven OIDC Authorization Code flow** (via [Authlib](https://authlib.org/)) against your organization's identity provider — the client secret never reaches the browser:
+
+1. The frontend sends the user to `GET /auth/login`, which redirects to the provider's authorize endpoint.
+2. The provider redirects back to `GET /auth/signin-oidc`; the backend exchanges the code, upserts a `User` row keyed by the OIDC `sub` claim, and stores `user_id` in a signed, `HttpOnly` session cookie (Starlette `SessionMiddleware`).
+3. The browser is redirected back to the SPA. Every subsequent `/api/*` call is authenticated via that cookie through `get_current_user`.
+4. `GET /api/auth/me` reports the current user to the frontend; `POST /api/auth/logout` clears the session.
+
+Configure the provider in `.env` (see Quick Start and Local Development below) — `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl`, plus `SESSION_SECRET_KEY`, `FRONTEND_URL`, and `BACKEND_PUBLIC_URL`.
 
 The **game engine** is the single source of truth for mechanics:
 
@@ -88,7 +101,8 @@ PostgreSQL stores the full game snapshot:
 
 | Entity | Purpose |
 |--------|---------|
-| `Game` | Session metadata, day/phase, team config, WIP limits, revenue |
+| `User` | OIDC identity (`sub`, email, name) — owns games |
+| `Game` | Session metadata, day/phase, team config, WIP limits, revenue; belongs to a `User` |
 | `Card` | Work items with story points, column, type, due dates |
 | `GameEvent` | Daily event cards and resolution state |
 | `GameMetric` | Time-series snapshots for charts |
@@ -130,6 +144,7 @@ User clicks Start Work
 |-------|--------------|
 | 🎨 Frontend | Vue 3, Vite, Pinia, Vue Router, vue-i18n, Tailwind CSS |
 | 🐍 Backend | Python 3.12, FastAPI, SQLAlchemy (async), Pydantic |
+| 🔐 Auth | Authlib (OIDC client), Starlette `SessionMiddleware` (signed session cookies) |
 | 🗄️ Database | PostgreSQL 16 |
 | 🐳 Infra | Docker Compose, Nginx |
 
@@ -140,19 +155,20 @@ User clicks Start Work
 ```
 KanGame2/
 ├── backend/              # FastAPI API and game engine
+│   ├── certs/            # Local self-signed TLS cert (gitignored, generated — see Quick Start)
 │   └── app/
-│       ├── api/          # REST routes
-│       ├── core/         # Config and database
+│       ├── api/routes/   # REST routes (games.py, auth.py)
+│       ├── core/         # Config, database, OIDC client (oauth.py), get_current_user (auth.py)
 │       ├── data/         # Card and event definitions
-│       ├── models/       # SQLAlchemy models
-│       ├── schemas/      # Pydantic DTOs
+│       ├── models/       # SQLAlchemy models (game.py, user.py)
+│       ├── schemas/      # Pydantic DTOs (game.py, user.py)
 │       └── services/     # Game engine logic
 ├── frontend/             # Vue 3 SPA
 │   └── src/
 │       ├── components/   # Board, cards, panels, modals, language selector
 │       ├── composables/  # Shared logic (e.g. content translation)
 │       ├── i18n/         # Locale files (ru, en) and vue-i18n setup
-│       ├── stores/       # Pinia state
+│       ├── stores/       # Pinia state (gameStore.js, authStore.js)
 │       ├── services/     # API client
 │       └── views/        # Home and game pages
 ├── nginx/                # Reverse proxy config
@@ -164,19 +180,28 @@ KanGame2/
 
 ## 🚀 Quick Start (Docker)
 
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/), Docker Compose, and OpenSSL
 
-```bash
-docker compose up --build
-```
+1. Create `.env` in the repo root (copy `.env.example`) with your OIDC provider's `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl=/auth/signin-oidc`, a random `SESSION_SECRET_KEY` (e.g. `openssl rand -hex 32`), and `FRONTEND_URL` / `BACKEND_PUBLIC_URL` (defaults `http://localhost` / `https://localhost:8000` work for local dev).
+2. Generate a local self-signed TLS cert for the backend — the OIDC provider redirects to `https://localhost:8000`, so the backend must serve HTTPS there:
+   ```bash
+   mkdir -p backend/certs
+   openssl req -x509 -newkey rsa:2048 -nodes -keyout backend/certs/localhost.key -out backend/certs/localhost.crt -days 365 -subj "/CN=localhost"
+   ```
+3. Start the stack:
+   ```bash
+   docker compose up --build
+   ```
+4. Visit `https://localhost:8000/health` once and accept the browser's self-signed-certificate warning — otherwise the provider's redirect back to the backend will fail silently.
 
-Open [http://localhost](http://localhost) in your browser.
+Open [http://localhost](http://localhost) in your browser and sign in to start a game.
 
 | Service | URL |
 |---------|-----|
 | 🌐 App | http://localhost |
 | 📖 API docs | http://localhost/api/docs |
 | ❤️ Health | http://localhost/health |
+| 🔐 Backend (HTTPS, OIDC callback only) | https://localhost:8000 |
 
 To stop:
 
@@ -211,16 +236,24 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create `backend/.env` (optional):
+Create `backend/.env` (or reuse the repo-root `.env` from Quick Start):
 
 ```env
 DATABASE_URL=postgresql+asyncpg://kanban:kanban@localhost:5432/kanban
+AuthClientId=...
+AuthClientSecret=...
+AuthAuthority=https://your-oidc-provider/
+AuthCallbackUrl=/auth/signin-oidc
+SESSION_SECRET_KEY=...
+FRONTEND_URL=http://localhost
+BACKEND_PUBLIC_URL=https://localhost:8000
+SESSION_COOKIE_SECURE=false
 ```
 
-Start the API:
+Start the API — the registered OIDC callback is `https://localhost:8000`, so it must run over HTTPS using the self-signed cert generated in the Quick Start section above:
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000 --ssl-certfile certs/localhost.crt --ssl-keyfile certs/localhost.key
 ```
 
 📖 API docs: http://localhost:8000/api/docs
@@ -267,6 +300,7 @@ npm run build
 
 ## 🕹️ How to Play
 
+0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the new-game form only appears once you're signed in
 1. 🆕 **Start a game** — Enter your name and a game name on the home screen
 2. ↔️ **Pull cards** — Use **Pull →** on cards in Ready and Done-buffer columns to move work forward, respecting WIP limits
 3. 👥 **Assign resources** — Drag a worker onto an Analysis/Development/Test card, or click one or more workers then click a card; assign each worker to a different task or stack several workers on one task; click an assigned badge to unassign
@@ -287,10 +321,16 @@ npm run build
 
 ## 🔌 API Endpoints
 
+All `/api/games*` routes require a signed-in session and only operate on games owned by the current user (others 404, not 403, to avoid leaking existence).
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/games` | Create a new game |
-| `GET` | `/api/games` | List all games |
+| `GET` | `/auth/login` | Redirect to the OIDC provider's authorize endpoint |
+| `GET` | `/auth/signin-oidc` | OIDC provider callback — exchanges the code, establishes the session |
+| `GET` | `/api/auth/me` | Current authenticated user (401 if not signed in) |
+| `POST` | `/api/auth/logout` | Clear the session |
+| `POST` | `/api/games` | Create a new game, owned by the current user |
+| `GET` | `/api/games` | List the current user's games |
 | `GET` | `/api/games/{id}` | Get game state |
 | `POST` | `/api/games/{id}/assign-worker` | Assign or unassign one worker to/from a card |
 | `POST` | `/api/games/{id}/pull-card` | Pull a card from Ready/Done buffer into the next active stage |

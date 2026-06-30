@@ -69,6 +69,7 @@ class MetricResponse(BaseModel):
 
 class GameResponse(BaseModel):
     id: uuid.UUID
+    user_id: uuid.UUID
     name: str
     player_name: str
     status: str

@@ -22,7 +22,11 @@
     "startGame": "🚀 Start Game",
     "recentGames": "Recent Games",
     "dayOf": "Day {current}/{total}",
-    "footer": "Based on getKanban® — a Lean/Agile board game simulation"
+    "footer": "Based on getKanban® — a Lean/Agile board game simulation",
+    "signOut": "Sign out",
+    "signIn": "Sign in",
+    "signInPrompt": "Sign in to play",
+    "signInPromptDesc": "You need to sign in before you can start or resume a game."
   },
   "game": {
     "loading": "Loading game…",

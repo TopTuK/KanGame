@@ -1,19 +1,29 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api.routes import games
+from app.api.routes import games, auth
 
 app = FastAPI(title="KanGame API", version="1.0.0", docs_url="/api/docs")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SESSION_SECRET_KEY,
+    session_cookie="kangame_session",
+    same_site="lax",
+    https_only=settings.SESSION_COOKIE_SECURE,
+    max_age=14 * 24 * 3600,
 )
 
 
@@ -47,6 +57,7 @@ async def startup():
 
 
 app.include_router(games.router, prefix="/api/games", tags=["games"])
+app.include_router(auth.router, tags=["auth"])
 
 
 @app.get("/health")

@@ -125,9 +125,10 @@ def can_pull_to(game: Game, wip_key: str) -> bool:
     return wip_count(game, wip_key) < limit
 
 
-async def create_game(db: AsyncSession, name: str, player_name: str) -> Game:
+async def create_game(db: AsyncSession, name: str, player_name: str, user_id: uuid.UUID) -> Game:
     game = Game(
         id=uuid.uuid4(),
+        user_id=user_id,
         name=name,
         player_name=player_name,
         status=GameStatus.active,
@@ -205,27 +206,29 @@ async def create_game(db: AsyncSession, name: str, player_name: str) -> Game:
         ))
 
     await db.commit()
-    return await get_game(db, game.id)
+    return await get_game(db, game.id, user_id)
 
 
-async def get_game(db: AsyncSession, game_id: uuid.UUID) -> Optional[Game]:
+async def get_game(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Game]:
     result = await db.execute(
         select(Game)
         .options(selectinload(Game.cards), selectinload(Game.events), selectinload(Game.metrics))
-        .where(Game.id == game_id)
+        .where(Game.id == game_id, Game.user_id == user_id)
     )
     return result.scalar_one_or_none()
 
 
-async def get_all_games(db: AsyncSession) -> list[Game]:
-    result = await db.execute(select(Game).order_by(Game.created_at.desc()))
+async def get_all_games(db: AsyncSession, user_id: uuid.UUID) -> list[Game]:
+    result = await db.execute(
+        select(Game).where(Game.user_id == user_id).order_by(Game.created_at.desc())
+    )
     return list(result.scalars().all())
 
 
 async def assign_worker(
-    db: AsyncSession, game_id: uuid.UUID, worker_id: str, card_id: uuid.UUID
+    db: AsyncSession, game_id: uuid.UUID, worker_id: str, card_id: uuid.UUID, user_id: uuid.UUID
 ) -> tuple[Optional[Game], str | None]:
-    game = await get_game(db, game_id)
+    game = await get_game(db, game_id, user_id)
     if not game or game.phase != "planning" or game.work_done:
         return game, "Cannot assign workers now"
 
@@ -250,13 +253,13 @@ async def assign_worker(
 
     _set_workers(game, workers)
     await db.commit()
-    return await get_game(db, game_id), None
+    return await get_game(db, game_id, user_id), None
 
 
 async def pull_card(
-    db: AsyncSession, game_id: uuid.UUID, card_id: uuid.UUID
+    db: AsyncSession, game_id: uuid.UUID, card_id: uuid.UUID, user_id: uuid.UUID
 ) -> tuple[Optional[Game], str | None]:
-    game = await get_game(db, game_id)
+    game = await get_game(db, game_id, user_id)
     if not game or game.phase != "planning" or game.work_done:
         return game, "Cannot pull now"
 
@@ -275,13 +278,13 @@ async def pull_card(
 
     card.column = to_col_str
     await db.commit()
-    return await get_game(db, game_id), None
+    return await get_game(db, game_id, user_id), None
 
 
 async def pull_backlog(
-    db: AsyncSession, game_id: uuid.UUID, card_type: str
+    db: AsyncSession, game_id: uuid.UUID, card_type: str, user_id: uuid.UUID
 ) -> tuple[Optional[Game], str | None]:
-    game = await get_game(db, game_id)
+    game = await get_game(db, game_id, user_id)
     if not game or game.phase != "planning" or game.work_done:
         return game, "Cannot pull now"
 
@@ -306,11 +309,11 @@ async def pull_backlog(
     card.entered_day = game.current_day
     card.age = 0
     await db.commit()
-    return await get_game(db, game_id), None
+    return await get_game(db, game_id, user_id), None
 
 
-async def pull_expedite(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Game], str | None]:
-    game = await get_game(db, game_id)
+async def pull_expedite(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> tuple[Optional[Game], str | None]:
+    game = await get_game(db, game_id, user_id)
     if not game or game.phase != "planning" or game.work_done:
         return game, "Cannot pull now"
 
@@ -330,7 +333,7 @@ async def pull_expedite(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[
     card.entered_day = game.current_day
     card.age = 0
     await db.commit()
-    return await get_game(db, game_id), None
+    return await get_game(db, game_id, user_id), None
 
 
 def _roll_work(game: Game, worker: dict, card: Card) -> tuple[int, str]:
@@ -385,8 +388,8 @@ def _apply_deploy_bonuses(game: Game, card: Card, log: list[dict]) -> None:
             log.append({"type": "penalty", "card_key": card.card_key, "amount": card.val})
 
 
-async def start_work(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Game], list[dict], str | None]:
-    game = await get_game(db, game_id)
+async def start_work(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> tuple[Optional[Game], list[dict], str | None]:
+    game = await get_game(db, game_id, user_id)
     if not game or game.phase != "planning":
         return game, [], "Wrong phase"
     if game.work_done:
@@ -466,7 +469,7 @@ async def start_work(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Gam
     game.work_done = True
 
     await db.commit()
-    return await get_game(db, game_id), log, None
+    return await get_game(db, game_id, user_id), log, None
 
 
 def _stage_complete(card: Card, bar: int) -> bool:
@@ -569,8 +572,8 @@ def _reveal_expedite(game: Game, day: int) -> None:
             card.column = "exp_backlog"
 
 
-async def end_day(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Game], dict, str | None]:
-    game = await get_game(db, game_id)
+async def end_day(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> tuple[Optional[Game], dict, str | None]:
+    game = await get_game(db, game_id, user_id)
     if not game:
         return game, {}, "Game not found"
     if not game.work_done:
@@ -626,4 +629,4 @@ async def end_day(db: AsyncSession, game_id: uuid.UUID) -> tuple[Optional[Game],
         _reveal_expedite(game, game.current_day)
 
     await db.commit()
-    return await get_game(db, game_id), modal, None
+    return await get_game(db, game_id, user_id), modal, None
