@@ -22,7 +22,11 @@
     "startGame": "🚀 Начать игру",
     "recentGames": "Недавние игры",
     "dayOf": "День {current}/{total}",
-    "footer": "На основе getKanban® — настольной Lean/Agile симуляции"
+    "footer": "На основе getKanban® — настольной Lean/Agile симуляции",
+    "signOut": "Выйти",
+    "signIn": "Войти",
+    "signInPrompt": "Войдите, чтобы играть",
+    "signInPromptDesc": "Для начала или продолжения игры необходимо войти в систему."
   },
   "game": {
     "loading": "Загрузка игры…",

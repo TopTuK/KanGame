@@ -38,9 +38,11 @@
         </div>
       </div>
 
-      <!-- New Game form -->
-      <div class="glass rounded-2xl p-8 w-full max-w-md animate-slide-up">
-        <h2 class="text-2xl font-bold text-white mb-6 text-center">{{ t('home.startNewGame') }}</h2>
+      <!-- New Game form (authenticated) -->
+      <div v-if="authStore.isAuthenticated" class="glass rounded-2xl p-8 w-full max-w-md animate-slide-up">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold text-white text-center flex-1">{{ t('home.startNewGame') }}</h2>
+        </div>
         <form @submit.prevent="startGame" class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-slate-300 mb-1">{{ t('home.yourName') }}</label>
@@ -71,10 +73,25 @@
             <span v-else>{{ t('home.startGame') }}</span>
           </button>
         </form>
+        <button
+          @click="authStore.logout()"
+          class="w-full mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          {{ t('home.signOut') }}
+        </button>
+      </div>
+
+      <!-- Sign in CTA (unauthenticated) -->
+      <div v-else-if="authStore.checked" class="glass rounded-2xl p-8 w-full max-w-md animate-slide-up text-center">
+        <h2 class="text-2xl font-bold text-white mb-4">{{ t('home.signInPrompt') }}</h2>
+        <p class="text-sm text-slate-400 mb-6">{{ t('home.signInPromptDesc') }}</p>
+        <button @click="signIn" class="w-full btn-primary text-lg py-3 rounded-xl">
+          {{ t('home.signIn') }}
+        </button>
       </div>
 
       <!-- Existing games -->
-      <div v-if="games.length" class="mt-12 w-full max-w-2xl animate-fade-in">
+      <div v-if="authStore.isAuthenticated && games.length" class="mt-12 w-full max-w-2xl animate-fade-in">
         <h3 class="text-lg font-semibold text-slate-300 mb-4">{{ t('home.recentGames') }}</h3>
         <div class="space-y-3">
           <div
@@ -108,16 +125,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { gamesApi } from '../services/api.js'
 import { useGameContent } from '../composables/useGameContent.js'
+import { useAuthStore } from '../stores/authStore.js'
 import LanguageSelector from '../components/LanguageSelector.vue'
 
 const { t } = useI18n()
 const { statusLabel } = useGameContent()
 const router = useRouter()
+const authStore = useAuthStore()
 
 function fmtRub(n) {
   return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
@@ -127,12 +146,24 @@ const gameName = ref('')
 const creating = ref(false)
 const games = ref([])
 
-onMounted(async () => {
+function signIn() {
+  window.location.href = 'https://localhost:8000/auth/login'
+}
+
+async function loadGames() {
   try {
     const res = await gamesApi.list()
     games.value = res.data
   } catch {}
-})
+}
+
+watch(
+  () => authStore.checked,
+  (checked) => {
+    if (checked && authStore.isAuthenticated) loadGames()
+  },
+  { immediate: true }
+)
 
 async function startGame() {
   creating.value = true

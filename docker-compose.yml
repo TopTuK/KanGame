@@ -17,6 +17,14 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://kanban:kanban@db:5432/kanban
+      AuthClientId: ${AuthClientId}
+      AuthClientSecret: ${AuthClientSecret}
+      AuthAuthority: ${AuthAuthority}
+      AuthCallbackUrl: ${AuthCallbackUrl}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://localhost:8000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     depends_on:
       db:
         condition: service_healthy

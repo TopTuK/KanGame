@@ -3,6 +3,7 @@ import axios from 'axios'
 const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 })
 
 export const gamesApi = {
@@ -16,6 +17,11 @@ export const gamesApi = {
   pullExpedite: (id) => api.post(`/games/${id}/pull-expedite`),
   startWork: (id) => api.post(`/games/${id}/start-work`),
   endDay: (id) => api.post(`/games/${id}/end-day`),
+}
+
+export const authApi = {
+  me: () => api.get('/auth/me'),
+  logout: () => api.post('/auth/logout'),
 }
 
 export default api

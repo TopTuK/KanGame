@@ -29,6 +29,7 @@ frontend/dist/
 .env
 .env.*
 !.env.example
+backend/certs/
 
 # IDE & editors
 .vscode/

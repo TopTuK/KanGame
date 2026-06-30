@@ -47,6 +47,7 @@ class Game(Base):
     __tablename__ = "games"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100))
     player_name: Mapped[str] = mapped_column(String(100))
     status: Mapped[GameStatus] = mapped_column(SAEnum(GameStatus), default=GameStatus.active)
