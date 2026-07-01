@@ -86,6 +86,8 @@ KanGame uses a **backend-driven OIDC Authorization Code flow** (via [Authlib](ht
 
 Configure the provider in `.env` (see Quick Start and Local Development below) — `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl`, plus `SESSION_SECRET_KEY`, `FRONTEND_URL`, and `BACKEND_PUBLIC_URL`.
 
+A separate, **test-only** login path (`POST /api/dev/test-login`) bypasses OIDC entirely; it 404s unless `ENABLE_TEST_LOGIN=true` and exists solely so the e2e suite can authenticate without a real identity provider — see [🧪 Testing](#-testing).
+
 The **game engine** is the single source of truth for mechanics:
 
 - Column flow: Backlog → Ready → Analysis → Analysis Done → Development → Dev Done → Test → Deployed
@@ -164,6 +166,7 @@ KanGame2/
 │       ├── schemas/      # Pydantic DTOs (game.py, user.py)
 │       └── services/     # Game engine logic
 ├── frontend/             # Vue 3 SPA
+│   ├── e2e/               # Playwright end-to-end tests (+ playwright.config.js)
 │   └── src/
 │       ├── components/   # Board, cards, panels, modals, language selector
 │       ├── composables/  # Shared logic (e.g. content translation)
@@ -173,7 +176,8 @@ KanGame2/
 │       └── views/        # Home and game pages
 ├── nginx/                # Reverse proxy config
 ├── LICENSE               # MIT license
-└── docker-compose.yml
+├── docker-compose.yml
+└── docker-compose.test.yml  # Test overlay: enables /api/dev/test-login, isolated ports
 ```
 
 ---
@@ -298,6 +302,37 @@ npm run build
 
 ---
 
+## 🧪 Testing
+
+### End-to-end (Playwright)
+
+`frontend/e2e/` drives the real app in a browser against a running stack. Sign-in normally goes through an external OIDC provider that automated tests can't complete, so the suite authenticates via the test-only `POST /api/dev/test-login` endpoint described in [🔐 Authentication](#-authentication) — it's gated by `ENABLE_TEST_LOGIN` and 404s unless that flag is set.
+
+1. Start an isolated test stack — `docker-compose.test.yml` enables the test-login endpoint and remaps ports so it can run alongside a normal dev stack; give it its own project name so it gets its own network/volumes instead of reusing your dev database:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.test.yml -p kangame-test up -d --build
+   ```
+2. Install Playwright's browser binary once:
+   ```bash
+   cd frontend
+   npx playwright install chromium
+   ```
+3. Run the tests:
+   ```bash
+   npm run test:e2e       # headless
+   npm run test:e2e:ui    # interactive UI mode
+   ```
+4. Tear down the test stack, including its volume, so test games don't pile up:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.test.yml -p kangame-test down -v
+   ```
+
+Tests target `http://localhost:8080` by default (the port `docker-compose.test.yml` maps nginx to); override with the `E2E_BASE_URL` env var if needed.
+
+Current coverage (`backlog-pull.spec.js`): the Backlog column's per-type pull buttons render with live counts, a pull is rejected with the WIP-limit error while Ready is full, and a pull succeeds and moves a card into Ready once a slot is freed.
+
+---
+
 ## 🕹️ How to Play
 
 0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the new-game form only appears once you're signed in
@@ -329,6 +364,7 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 | `GET` | `/auth/signin-oidc` | OIDC provider callback — exchanges the code, establishes the session |
 | `GET` | `/api/auth/me` | Current authenticated user (401 if not signed in) |
 | `POST` | `/api/auth/logout` | Clear the session |
+| `POST` | `/api/dev/test-login` | **Test-only.** Disabled by default (404) unless `ENABLE_TEST_LOGIN=true`; bypasses OIDC for e2e tests — see [🧪 Testing](#-testing) |
 | `POST` | `/api/games` | Create a new game, owned by the current user |
 | `GET` | `/api/games` | List the current user's games |
 | `GET` | `/api/games/{id}` | Get game state |

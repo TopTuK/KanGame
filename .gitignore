@@ -53,6 +53,12 @@ yarn-error.log*
 # Docker (local overrides)
 docker-compose.override.yml
 
+# Playwright e2e
+frontend/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
 # Database
 *.db
 *.sqlite3

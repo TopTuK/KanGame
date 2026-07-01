@@ -19,6 +19,28 @@
         isAtLimit ? 'bg-red-950/20 border border-red-800/30' : 'bg-slate-800/50 border border-slate-700/30',
       ]"
     >
+      <div v-if="column.key === 'backlog'" class="space-y-1 pb-1">
+        <button
+          v-for="opt in backlogPullOptions"
+          :key="opt.type"
+          :disabled="!store.canPlan() || store.loading || opt.count === 0"
+          @click="store.pullBacklog(opt.type)"
+          class="w-full py-1 text-[9px] font-semibold rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700/40 hover:bg-emerald-800/60 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-emerald-900/50"
+        >
+          {{ t(`pull.${opt.labelKey}`) }} ({{ opt.count }}) →
+        </button>
+      </div>
+
+      <div v-else-if="column.key === 'exp_backlog'" class="pb-1">
+        <button
+          :disabled="!store.canPlan() || store.loading || cards.length === 0"
+          @click="store.pullExpedite()"
+          class="w-full py-1 text-[9px] font-semibold rounded bg-red-900/50 text-red-300 border border-red-700/40 hover:bg-red-800/60 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-red-900/50"
+        >
+          {{ t('pull.expedite') }} ({{ cards.length }}) →
+        </button>
+      </div>
+
       <KanbanCard
         v-for="card in cards"
         :key="card.id"
@@ -36,13 +58,31 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useGameStore } from '../stores/gameStore.js'
 import KanbanCard from './KanbanCard.vue'
+
+const { t } = useI18n()
+const store = useGameStore()
 
 const props = defineProps({
   column: Object,
   cards: Array,
   wipCount: Number,
 })
+
+const BACKLOG_TYPES = [
+  { type: 's', labelKey: 'standard', cardType: 'standard' },
+  { type: 'f', labelKey: 'fixed', cardType: 'fixed_date' },
+  { type: 'i', labelKey: 'intangible', cardType: 'intangible' },
+]
+
+const backlogPullOptions = computed(() =>
+  BACKLOG_TYPES.map(opt => ({
+    ...opt,
+    count: props.cards.filter(c => c.card_type === opt.cardType).length,
+  }))
+)
 
 const displayWip = computed(() => {
   if (props.column.wipLimit != null && props.wipCount != null) {

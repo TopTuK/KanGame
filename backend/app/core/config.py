@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     SESSION_SECRET_KEY: str
     SESSION_COOKIE_SECURE: bool = False
 
+    # Only for e2e tests: enables POST /api/dev/test-login to bypass OIDC.
+    # Must stay false outside of test environments.
+    ENABLE_TEST_LOGIN: bool = False
+
     class Config:
         env_file = ".env"
 
