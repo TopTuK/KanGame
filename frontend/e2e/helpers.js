@@ -21,10 +21,10 @@ export async function openGame(page, request) {
   await forceEnglishLocale(page)
   await page.goto(`/game/${game.id}`)
 
-  const startBtn = page.getByRole('button', { name: "Let's play!" })
-  if (await startBtn.count()) {
-    await startBtn.click()
-  }
+  // Every freshly created game starts on Day 9 with no metrics yet, so the
+  // welcome modal always shows. Use a locator action (not .count()) so
+  // Playwright auto-waits for it instead of racing loadGame()'s async fetch.
+  await page.getByRole('button', { name: "Let's play!" }).click()
   return game
 }
 
