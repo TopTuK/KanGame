@@ -2,9 +2,3 @@ services:
   backend:
     environment:
       ENABLE_TEST_LOGIN: "true"
-    ports:
-      - "8001:8000"
-
-  nginx:
-    ports:
-      - "8080:80"

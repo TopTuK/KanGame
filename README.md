@@ -177,7 +177,7 @@ KanGame2/
 ├── nginx/                # Reverse proxy config
 ├── LICENSE               # MIT license
 ├── docker-compose.yml
-└── docker-compose.test.yml  # Test overlay: enables /api/dev/test-login, isolated ports
+└── docker-compose.test.yml  # Test overlay: enables /api/dev/test-login
 ```
 
 ---
@@ -308,8 +308,14 @@ npm run build
 
 `frontend/e2e/` drives the real app in a browser against a running stack. Sign-in normally goes through an external OIDC provider that automated tests can't complete, so the suite authenticates via the test-only `POST /api/dev/test-login` endpoint described in [🔐 Authentication](#-authentication) — it's gated by `ENABLE_TEST_LOGIN` and 404s unless that flag is set.
 
-1. Start an isolated test stack — `docker-compose.test.yml` enables the test-login endpoint and remaps ports so it can run alongside a normal dev stack; give it its own project name so it gets its own network/volumes instead of reusing your dev database:
+1. Start an isolated test stack — `docker-compose.test.yml` enables the test-login endpoint; give it its own project name (`-p`) so it gets its own network/volumes instead of reusing your dev database, and its own host ports (`BACKEND_PORT` / `NGINX_PORT`) so it can run alongside a normal dev stack:
    ```bash
+   # bash
+   BACKEND_PORT=8001 NGINX_PORT=8080 docker compose -f docker-compose.yml -f docker-compose.test.yml -p kangame-test up -d --build
+   ```
+   ```powershell
+   # PowerShell
+   $env:BACKEND_PORT=8001; $env:NGINX_PORT=8080
    docker compose -f docker-compose.yml -f docker-compose.test.yml -p kangame-test up -d --build
    ```
 2. Install Playwright's browser binary once:
@@ -327,7 +333,7 @@ npm run build
    docker compose -f docker-compose.yml -f docker-compose.test.yml -p kangame-test down -v
    ```
 
-Tests target `http://localhost:8080` by default (the port `docker-compose.test.yml` maps nginx to); override with the `E2E_BASE_URL` env var if needed.
+Tests target `http://localhost:8080` by default; override with the `E2E_BASE_URL` env var if you chose different ports.
 
 Current coverage (`backlog-pull.spec.js`): the Backlog column's per-type pull buttons render with live counts, a pull is rejected with the WIP-limit error while Ready is full, and a pull succeeds and moves a card into Ready once a slot is freed.
 
