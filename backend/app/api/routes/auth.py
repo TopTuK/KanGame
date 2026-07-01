@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import RedirectResponse
@@ -11,6 +11,8 @@ from app.models.user import User
 from app.schemas.user import UserResponse
 
 router = APIRouter()
+
+TEST_USER_SUB = "e2e-test-user"
 
 
 @router.get("/auth/login")
@@ -41,6 +43,25 @@ async def signin_callback(request: Request, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return RedirectResponse(settings.FRONTEND_URL, status_code=303)
+
+
+@router.post("/api/dev/test-login", response_model=UserResponse)
+async def test_login(request: Request, db: AsyncSession = Depends(get_db)):
+    """E2E-test-only login that bypasses OIDC. 404s unless ENABLE_TEST_LOGIN is set."""
+    if not settings.ENABLE_TEST_LOGIN:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    result = await db.execute(select(User).where(User.sub == TEST_USER_SUB))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(sub=TEST_USER_SUB, email="e2e@test.local", name="E2E Test User")
+        db.add(user)
+        await db.flush()
+
+    request.session["user_id"] = str(user.id)
+    await db.commit()
+
+    return user
 
 
 @router.get("/api/auth/me", response_model=UserResponse)

@@ -20,7 +20,7 @@
       </div>
 
       <div class="flex-1 flex overflow-hidden">
-        <div class="flex-1 overflow-x-auto overflow-y-hidden p-3">
+        <div class="flex-1 overflow-x-auto overflow-y-auto p-3">
           <KanbanBoard />
         </div>
         <div class="w-64 border-l border-slate-700/50 overflow-y-auto flex-shrink-0">
