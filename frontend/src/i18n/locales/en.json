@@ -77,7 +77,7 @@
   },
   "resources": {
     "planning": "Planning phase",
-    "planningHint": "Drag one worker onto a card, or click one or more workers then click a card. Pull cards on the board, then Start Work.",
+    "planningHint": "Assign workers to cards",
     "workDone": "Work complete",
     "endDayHint": "Click End Day to see events and advance to the next day.",
     "unavailable": "Unavailable",
