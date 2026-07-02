@@ -1,4 +1,4 @@
-// Shared helpers for the backlog-pull e2e suite.
+// Shared helpers for the card-drag e2e suite.
 
 export async function forceEnglishLocale(page) {
   await page.addInitScript(() => {
@@ -33,13 +33,26 @@ export function cardContainer(page, cardKey) {
   return page.locator('.rounded-lg').filter({ has: page.locator(`text="${cardKey}"`) })
 }
 
-export function backlogTypeButton(page, label) {
-  return page.getByRole('button', { name: new RegExp(`^${label} \\(\\d+\\) →$`) })
+// The drop-target container for a given column key (e.g. "ready") — see the
+// `data-column` attribute on KanbanColumn.vue's card-list div.
+export function columnBody(page, columnKey) {
+  return page.locator(`[data-column="${columnKey}"]`)
 }
 
-export function readyBacklogCount(button) {
-  return button.textContent().then((text) => {
-    const match = text.match(/\((\d+)\)/)
-    return match ? Number(match[1]) : null
-  })
+// Drags the card identified by cardKey onto targetLocator via a real native
+// mouse down/move/up sequence, which reliably triggers HTML5
+// dragstart/dragover/drop events in headless Chromium.
+export async function dragCardTo(page, cardKey, targetLocator, { steps = 12 } = {}) {
+  const source = cardContainer(page, cardKey)
+  const sourceBox = await source.boundingBox()
+  const targetBox = await targetLocator.boundingBox()
+  const startX = sourceBox.x + sourceBox.width / 2
+  const startY = sourceBox.y + sourceBox.height / 2
+  await page.mouse.move(startX, startY)
+  await page.mouse.down()
+  // A small initial nudge is required to cross the browser's native
+  // drag-initiation threshold before jumping to the actual target.
+  await page.mouse.move(startX + 5, startY + 5, { steps: 5 })
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps })
+  await page.mouse.up()
 }

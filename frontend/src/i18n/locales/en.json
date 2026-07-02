@@ -68,13 +68,6 @@
   "board": {
     "expediteTrack": "Expedite"
   },
-  "pull": {
-    "title": "Pull from backlog:",
-    "standard": "Standard (S)",
-    "fixed": "Fixed-date (F)",
-    "intangible": "Intangible (I)",
-    "expedite": "Pull Expedite"
-  },
   "resources": {
     "planning": "Planning phase",
     "planningHint": "Assign workers to cards",
@@ -122,7 +115,6 @@
     "dropHere": "Drop here",
     "assignMember": "+ assign member",
     "ptsEfficiency": "+{pts} pts · {eff}",
-    "pull": "Pull",
     "due": "Due:",
     "day": "Day {day}",
     "day_short": "day",
@@ -208,8 +200,8 @@
   },
   "help": {
     "title": "Welcome to KanGame",
-    "intro": "You start on Day 9 with stories already in progress. Each day: assign workers, pull cards, Start Work, then End Day.",
-    "pull": "Pull Standard/Fixed/Intangible stories from backlog into Ready",
+    "intro": "You start on Day 9 with stories already in progress. Each day: assign workers, drag cards, Start Work, then End Day.",
+    "pull": "Drag cards to their next column to move them forward — including from the Backlog into Ready",
     "assign": "Click one or more workers, then click a card in Analysis, Development, or Test",
     "startWork": "Start Work rolls dice (2d6 specialist, 1d6 cross-role) and advances completed stages",
     "endDay": "End Day applies events, checks deadlines, and advances the calendar",

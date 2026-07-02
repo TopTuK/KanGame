@@ -14,31 +14,23 @@
     </div>
 
     <div
+      :data-column="column.key"
+      @dragover="onListDragOver"
+      @dragenter="onListDragEnter"
+      @dragleave="onListDragLeave"
+      @drop="onListDrop"
       :class="[
-        'flex-1 overflow-y-auto rounded-b-xl p-1.5 space-y-1.5 min-h-[80px]',
+        'flex-1 overflow-y-auto rounded-b-xl p-1.5 space-y-1.5 min-h-[80px] transition-all',
         isAtLimit ? 'bg-red-950/20 border border-red-800/30' : 'bg-slate-800/50 border border-slate-700/30',
+        isCardDropTargetColumn ? (cardDropValid ? 'ring-2 ring-emerald-400' : 'ring-2 ring-red-500/70') : '',
       ]"
     >
-      <div v-if="column.key === 'backlog'" class="space-y-1 pb-1">
-        <button
-          v-for="opt in backlogPullOptions"
-          :key="opt.type"
-          :disabled="!store.canPlan() || store.loading || opt.count === 0"
-          @click="store.pullBacklog(opt.type)"
-          class="w-full py-1 text-[9px] font-semibold rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700/40 hover:bg-emerald-800/60 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-emerald-900/50"
-        >
-          {{ t(`pull.${opt.labelKey}`) }} ({{ opt.count }}) →
-        </button>
-      </div>
-
-      <div v-else-if="column.key === 'exp_backlog'" class="pb-1">
-        <button
-          :disabled="!store.canPlan() || store.loading || cards.length === 0"
-          @click="store.pullExpedite()"
-          class="w-full py-1 text-[9px] font-semibold rounded bg-red-900/50 text-red-300 border border-red-700/40 hover:bg-red-800/60 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-red-900/50"
-        >
-          {{ t('pull.expedite') }} ({{ cards.length }}) →
-        </button>
+      <div
+        v-if="isCardDragOver && isCardDropTargetColumn"
+        class="text-[9px] text-center py-1 rounded border"
+        :class="cardDropValid ? 'text-emerald-300 bg-emerald-950/40 border-emerald-700/30' : 'text-red-300 bg-red-950/40 border-red-700/30'"
+      >
+        {{ t('columns.dropCards') }}
       </div>
 
       <KanbanCard
@@ -46,7 +38,6 @@
         :key="card.id"
         :card="card"
         :column-key="column.key"
-        :pullable="column.pullable"
       />
 
       <div v-if="!cards.length" class="h-12 flex items-center justify-center">
@@ -57,7 +48,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useGameStore } from '../stores/gameStore.js'
 import KanbanCard from './KanbanCard.vue'
@@ -71,18 +62,38 @@ const props = defineProps({
   wipCount: Number,
 })
 
-const BACKLOG_TYPES = [
-  { type: 's', labelKey: 'standard', cardType: 'standard' },
-  { type: 'f', labelKey: 'fixed', cardType: 'fixed_date' },
-  { type: 'i', labelKey: 'intangible', cardType: 'intangible' },
-]
+const isCardDragOver = ref(false)
+const isCardDropTargetColumn = computed(() => store.draggingCard?.toColumn === props.column.key)
+const cardDropValid = computed(() => isCardDropTargetColumn.value && store.canDropOnColumn(props.column.key))
 
-const backlogPullOptions = computed(() =>
-  BACKLOG_TYPES.map(opt => ({
-    ...opt,
-    count: props.cards.filter(c => c.card_type === opt.cardType).length,
-  }))
-)
+function onListDragOver(event) {
+  if (!store.draggingCard || !isCardDropTargetColumn.value) return
+  event.preventDefault()
+  event.dataTransfer.dropEffect = cardDropValid.value ? 'move' : 'none'
+}
+
+function onListDragEnter(event) {
+  if (!store.draggingCard || !isCardDropTargetColumn.value) return
+  event.preventDefault()
+  isCardDragOver.value = true
+}
+
+function onListDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    isCardDragOver.value = false
+  }
+}
+
+function onListDrop(event) {
+  isCardDragOver.value = false
+  if (!store.draggingCard || !cardDropValid.value) return
+  const raw = event.dataTransfer.getData('cardId') || event.dataTransfer.getData('text/plain')
+  const cardId = raw?.startsWith('card:') ? raw.slice('card:'.length) : raw
+  if (cardId) {
+    event.preventDefault()
+    store.pullCard(cardId)
+  }
+}
 
 const displayWip = computed(() => {
   if (props.column.wipLimit != null && props.wipCount != null) {

@@ -1,12 +1,16 @@
 <template>
   <div
+    :draggable="isDraggableSource"
     @click="onCardClick"
+    @dragstart="onCardDragStart"
+    @dragend="onCardDragEnd"
     @dragover="onDragOver"
     @dragenter="onDragEnter"
     @dragleave="onDragLeave"
     @drop="onDrop"
     :class="[
-      'rounded-lg border transition-all duration-200 select-none overflow-hidden cursor-pointer',
+      'rounded-lg border transition-all duration-200 select-none overflow-hidden',
+      isDraggableSource ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
       cardBorderClass,
       card.is_blocked ? 'ring-1 ring-red-500/50' : '',
       ringClass,
@@ -83,14 +87,6 @@
         Drop to assign
       </div>
 
-      <button
-        v-if="pullable && store.canPlan()"
-        @click.stop="store.pullCard(card.id)"
-        class="w-full mt-0.5 py-0.5 text-[9px] font-semibold rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700/40 hover:bg-emerald-800/60"
-      >
-        {{ t('card.pull') }} →
-      </button>
-
       <div v-if="card.due_day" class="text-[9px] text-white/50">
         {{ t('card.due') }} {{ t('card.day', { day: card.due_day }) }}
       </div>
@@ -111,7 +107,6 @@ const store = useGameStore()
 const props = defineProps({
   card: Object,
   columnKey: String,
-  pullable: Boolean,
 })
 
 const isDragOver = ref(false)
@@ -127,6 +122,10 @@ const hasWorkers = computed(() => assignedWorkers.value.length > 0)
 
 const isDropTarget = computed(() =>
   store.isActiveWorkColumn(props.columnKey) && store.canPlan()
+)
+
+const isDraggableSource = computed(() =>
+  store.isDraggableCardColumn(props.columnKey) && store.canPlan() && !store.loading
 )
 
 const isSelectedTarget = computed(() =>
@@ -208,6 +207,21 @@ function workerBadgeCls(type) {
 }
 
 // ── Drag & drop ──────────────────────────────────────────────────────────────
+
+function onCardDragStart(event) {
+  if (!isDraggableSource.value) {
+    event.preventDefault()
+    return
+  }
+  event.dataTransfer.setData('cardId', props.card.id)
+  event.dataTransfer.setData('text/plain', `card:${props.card.id}`)
+  event.dataTransfer.effectAllowed = 'move'
+  store.startDragCard(props.card.id, props.columnKey)
+}
+
+function onCardDragEnd() {
+  store.stopDragCard()
+}
 
 function onDragOver(event) {
   if (!isDropTarget.value || !store.draggingWorkerId) return

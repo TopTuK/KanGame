@@ -24,9 +24,11 @@ from app.data.cards import (
 )
 
 PULL_WIP_KEYS = {
+    "backlog": "ready",
     "ready": "analysis",
     "analysis_done": "development",
     "dev_done": "test",
+    "exp_backlog": "expedite",
     "exp_ready": "exp_analysis",
     "exp_analysis_done": "exp_development",
     "exp_dev_done": "exp_test",
@@ -277,61 +279,10 @@ async def pull_card(
         return game, f"WIP limit reached for {wip_key}"
 
     card.column = to_col_str
-    await db.commit()
-    return await get_game(db, game_id, user_id), None
+    if from_col in ("backlog", "exp_backlog"):
+        card.entered_day = game.current_day
+        card.age = 0
 
-
-async def pull_backlog(
-    db: AsyncSession, game_id: uuid.UUID, card_type: str, user_id: uuid.UUID
-) -> tuple[Optional[Game], str | None]:
-    game = await get_game(db, game_id, user_id)
-    if not game or game.phase != "planning" or game.work_done:
-        return game, "Cannot pull now"
-
-    if not can_pull_to(game, "ready"):
-        limit = game.wip_limits.get("ready", 5)
-        return game, f"Ready WIP limit reached (max {limit})"
-
-    type_map = {"s": "standard", "f": "fixed_date", "i": "intangible"}
-    ctype = type_map.get(card_type)
-    if not ctype:
-        return game, "Invalid card type"
-
-    card = next(
-        (c for c in sorted(game.cards, key=lambda x: x.sort_order)
-         if c.column == "backlog" and c.card_type == ctype),
-        None,
-    )
-    if not card:
-        return game, f"No more {card_type.upper()} cards in backlog"
-
-    card.column = "ready"
-    card.entered_day = game.current_day
-    card.age = 0
-    await db.commit()
-    return await get_game(db, game_id, user_id), None
-
-
-async def pull_expedite(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> tuple[Optional[Game], str | None]:
-    game = await get_game(db, game_id, user_id)
-    if not game or game.phase != "planning" or game.work_done:
-        return game, "Cannot pull now"
-
-    exp_ready_count = sum(1 for c in game.cards if c.column == "exp_ready")
-    if exp_ready_count >= game.wip_limits.get("expedite", 1):
-        return game, "Expedite lane is full"
-
-    card = next(
-        (c for c in sorted(game.cards, key=lambda x: x.sort_order)
-         if c.column == "exp_backlog"),
-        None,
-    )
-    if not card:
-        return game, "No expedite cards available"
-
-    card.column = "exp_ready"
-    card.entered_day = game.current_day
-    card.age = 0
     await db.commit()
     return await get_game(db, game_id, user_id), None
 

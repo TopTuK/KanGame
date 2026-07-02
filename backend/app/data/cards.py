@@ -408,9 +408,11 @@ EVENT_DEFINITIONS = [
 
 # Pull move map: from done column → next active column
 PULL_MOVES = {
+    "backlog": "ready",
     "ready": "analysis",
     "analysis_done": "development",
     "dev_done": "test",
+    "exp_backlog": "exp_ready",
     "exp_ready": "exp_analysis",
     "exp_analysis_done": "exp_development",
     "exp_dev_done": "exp_test",
@@ -435,6 +437,7 @@ WIP_GROUPS = {
     "exp_analysis": ["exp_analysis", "exp_analysis_done"],
     "exp_development": ["exp_development", "exp_dev_done"],
     "exp_test": ["exp_test"],
+    "expedite": ["exp_ready"],
 }
 
 INITIAL_WIP = {"ready": 5, "analysis": 3, "development": 5, "test": 3, "expedite": 1}

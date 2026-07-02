@@ -1,6 +1,6 @@
 <template>
   <div class="h-screen flex flex-col overflow-hidden bg-board-bg">
-    <GameHeader />
+    <GameHeader @open-metrics="showMetrics = true" />
 
     <div v-if="store.loading && !store.game" class="flex-1 flex items-center justify-center">
       <div class="text-center">
@@ -11,6 +11,7 @@
 
     <template v-else-if="store.game">
       <HelpModal v-if="showHelp" @close="showHelp = false" />
+      <MetricsModal v-if="showMetrics" @close="showMetrics = false" />
       <WorkLogModal v-if="store.showWorkLog" :log="store.workLog" @close="store.dismissWorkLog()" />
       <EndDayModal v-if="store.endDayModal" :modal="store.endDayModal" @close="store.dismissEndDayModal()" />
       <ScoreModal v-if="store.isGameOver" />
@@ -19,18 +20,13 @@
         <ResourcePanel />
       </div>
 
-      <div class="flex-1 flex overflow-hidden">
-        <div
-          ref="boardScrollEl"
-          class="flex-1 overflow-x-auto overflow-y-auto p-3"
-          @dragover="onBoardDragOver"
-          @dragleave="onBoardDragLeave"
-        >
-          <KanbanBoard />
-        </div>
-        <div class="w-64 border-l border-slate-700/50 overflow-y-auto flex-shrink-0">
-          <MetricsPanel />
-        </div>
+      <div
+        ref="boardScrollEl"
+        class="flex-1 overflow-x-auto overflow-y-auto p-3"
+        @dragover="onBoardDragOver"
+        @dragleave="onBoardDragLeave"
+      >
+        <KanbanBoard />
       </div>
     </template>
   </div>
@@ -44,7 +40,7 @@ import { useGameStore } from '../stores/gameStore.js'
 import GameHeader from '../components/GameHeader.vue'
 import KanbanBoard from '../components/KanbanBoard.vue'
 import ResourcePanel from '../components/ResourcePanel.vue'
-import MetricsPanel from '../components/MetricsPanel.vue'
+import MetricsModal from '../components/MetricsModal.vue'
 import ScoreModal from '../components/ScoreModal.vue'
 import HelpModal from '../components/HelpModal.vue'
 import WorkLogModal from '../components/WorkLogModal.vue'
@@ -54,6 +50,7 @@ const { t } = useI18n()
 const route = useRoute()
 const store = useGameStore()
 const showHelp = ref(false)
+const showMetrics = ref(false)
 
 // Native HTML5 drag-and-drop suppresses normal wheel scrolling for its
 // duration, and this layout has no page-level scroll fallback (h-screen
