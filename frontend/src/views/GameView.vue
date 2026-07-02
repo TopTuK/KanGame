@@ -20,7 +20,12 @@
       </div>
 
       <div class="flex-1 flex overflow-hidden">
-        <div class="flex-1 overflow-x-auto overflow-y-auto p-3">
+        <div
+          ref="boardScrollEl"
+          class="flex-1 overflow-x-auto overflow-y-auto p-3"
+          @dragover="onBoardDragOver"
+          @dragleave="onBoardDragLeave"
+        >
           <KanbanBoard />
         </div>
         <div class="w-64 border-l border-slate-700/50 overflow-y-auto flex-shrink-0">
@@ -32,7 +37,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useGameStore } from '../stores/gameStore.js'
@@ -50,10 +55,58 @@ const route = useRoute()
 const store = useGameStore()
 const showHelp = ref(false)
 
+// Native HTML5 drag-and-drop suppresses normal wheel scrolling for its
+// duration, and this layout has no page-level scroll fallback (h-screen
+// overflow-hidden), so without this a worker can't be dragged to a card
+// below the fold. Auto-scroll the board while dragging near its edges.
+const boardScrollEl = ref(null)
+const DRAG_SCROLL_EDGE = 60
+const DRAG_SCROLL_SPEED = 14
+let dragPointerY = null
+let dragScrollRafId = null
+
+function dragScrollLoop() {
+  const el = boardScrollEl.value
+  if (el && dragPointerY != null) {
+    const rect = el.getBoundingClientRect()
+    if (dragPointerY < rect.top + DRAG_SCROLL_EDGE) {
+      const intensity = (rect.top + DRAG_SCROLL_EDGE - dragPointerY) / DRAG_SCROLL_EDGE
+      el.scrollTop -= DRAG_SCROLL_SPEED * intensity
+    } else if (dragPointerY > rect.bottom - DRAG_SCROLL_EDGE) {
+      const intensity = (dragPointerY - (rect.bottom - DRAG_SCROLL_EDGE)) / DRAG_SCROLL_EDGE
+      el.scrollTop += DRAG_SCROLL_SPEED * intensity
+    }
+  }
+  dragScrollRafId = requestAnimationFrame(dragScrollLoop)
+}
+
+function onBoardDragOver(event) {
+  dragPointerY = event.clientY
+}
+
+function onBoardDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    dragPointerY = null
+  }
+}
+
+function stopDragScroll() {
+  dragPointerY = null
+}
+
 onMounted(async () => {
   await store.loadGame(route.params.id)
   if (store.game?.current_day === 9 && !store.game?.metrics?.length) {
     showHelp.value = true
   }
+  dragScrollRafId = requestAnimationFrame(dragScrollLoop)
+  window.addEventListener('dragend', stopDragScroll)
+  window.addEventListener('drop', stopDragScroll)
+})
+
+onBeforeUnmount(() => {
+  if (dragScrollRafId) cancelAnimationFrame(dragScrollRafId)
+  window.removeEventListener('dragend', stopDragScroll)
+  window.removeEventListener('drop', stopDragScroll)
 })
 </script>

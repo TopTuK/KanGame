@@ -1,5 +1,5 @@
 <template>
-  <div :class="['flex flex-col flex-shrink-0 h-full', column.pullable ? 'w-36' : 'w-44']">
+  <div :class="['flex flex-col flex-shrink-0', column.pullable ? 'w-36' : 'w-44']">
     <div :class="['rounded-t-xl px-2 py-2 flex items-center justify-between', headerClass]">
       <div class="flex items-center gap-1.5 min-w-0">
         <span class="text-sm">{{ column.icon }}</span>

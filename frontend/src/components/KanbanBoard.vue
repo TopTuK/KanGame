@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-3 h-full min-w-max pb-2">
+  <div class="flex flex-col gap-3 min-h-full min-w-max pb-2">
     <!-- Standard track -->
     <div class="flex gap-2">
       <KanbanColumn
