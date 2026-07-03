@@ -33,20 +33,29 @@
     <div :class="['px-2 pb-2 space-y-1', cardBodyBgClass]">
       <div v-if="card.analysis_total > 0" class="flex items-center gap-1">
         <span class="text-[9px] w-3 text-violet-300/70">🔍</span>
-        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
-          <div class="h-full bg-violet-400 rounded-full transition-all" :style="{ width: analysisPct + '%' }"></div>
+        <div class="flex-1 flex flex-wrap items-center gap-0.5">
+          <span
+            v-for="(filled, i) in analysisDots" :key="i"
+            :class="['w-1.5 h-1.5 rounded-full transition-colors', filled ? 'bg-violet-400' : 'bg-black/30']"
+          ></span>
         </div>
       </div>
       <div v-if="card.dev_total > 0" class="flex items-center gap-1">
         <span class="text-[9px] w-3 text-sky-300/70">💻</span>
-        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
-          <div class="h-full bg-sky-400 rounded-full transition-all" :style="{ width: devPct + '%' }"></div>
+        <div class="flex-1 flex flex-wrap items-center gap-0.5">
+          <span
+            v-for="(filled, i) in devDots" :key="i"
+            :class="['w-1.5 h-1.5 rounded-full transition-colors', filled ? 'bg-sky-400' : 'bg-black/30']"
+          ></span>
         </div>
       </div>
       <div v-if="card.test_total > 0" class="flex items-center gap-1">
         <span class="text-[9px] w-3 text-amber-300/70">🧪</span>
-        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
-          <div class="h-full bg-amber-400 rounded-full transition-all" :style="{ width: testPct + '%' }"></div>
+        <div class="flex-1 flex flex-wrap items-center gap-0.5">
+          <span
+            v-for="(filled, i) in testDots" :key="i"
+            :class="['w-1.5 h-1.5 rounded-full transition-colors', filled ? 'bg-amber-400' : 'bg-black/30']"
+          ></span>
         </div>
       </div>
 
@@ -159,18 +168,13 @@ const headerValueClass = computed(() => {
   return 'text-emerald-300'
 })
 
-const analysisPct = computed(() => {
-  if (!props.card.analysis_total) return 100
-  return ((props.card.analysis_total - props.card.analysis_remaining) / props.card.analysis_total) * 100
-})
-const devPct = computed(() => {
-  if (!props.card.dev_total) return 100
-  return ((props.card.dev_total - props.card.dev_remaining) / props.card.dev_total) * 100
-})
-const testPct = computed(() => {
-  if (!props.card.test_total) return 100
-  return ((props.card.test_total - props.card.test_remaining) / props.card.test_total) * 100
-})
+function dotStates(total, remaining) {
+  const filled = Math.max(0, Math.min(total, Math.round(total - remaining)))
+  return Array.from({ length: total }, (_, i) => i < filled)
+}
+const analysisDots = computed(() => dotStates(props.card.analysis_total, props.card.analysis_remaining))
+const devDots = computed(() => dotStates(props.card.dev_total, props.card.dev_remaining))
+const testDots = computed(() => dotStates(props.card.test_total, props.card.test_remaining))
 const blockerPct = computed(() => {
   if (!props.card.blocker_total) return 0
   return ((props.card.blocker_total - props.card.blocker_remaining) / props.card.blocker_total) * 100

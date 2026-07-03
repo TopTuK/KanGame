@@ -103,14 +103,11 @@ def active_bar(card: Card) -> int:
     return -1
 
 
-def is_specialist(worker_type: str, column: str) -> bool:
-    if worker_type == "analyst" and column in ("analysis", "exp_analysis"):
-        return True
-    if worker_type == "developer" and column in ("development", "exp_development"):
-        return True
-    if worker_type == "tester" and column in ("test", "exp_test"):
-        return True
-    return False
+WORK_RANGES = {
+    0: {"analyst": (1, 6), "developer": (1, 4), "tester": (1, 4)},   # Analysis
+    1: {"analyst": (1, 3), "developer": (3, 7), "tester": (2, 4)},   # Development
+    2: {"analyst": (2, 5), "developer": (2, 5), "tester": (3, 7)},   # Testing
+}
 
 
 def can_assign_worker(game: Game, worker: dict, card: Card) -> bool:
@@ -288,15 +285,12 @@ async def pull_card(
 
 
 def _roll_work(game: Game, worker: dict, card: Card) -> tuple[int, str]:
-    spec = is_specialist(worker["type"], card.column)
+    bar = active_bar(card)
+    lo, hi = WORK_RANGES[bar][worker["type"]]
     buffs = _buffs(game)
-    if spec:
-        r1, r2 = random.randint(1, 6), random.randint(1, 6)
-        work = r1 + r2 + buffs.get(worker["type"], 0)
-        return work, f"2d6: {r1}+{r2}={r1+r2}"
-    r1 = random.randint(1, 6)
-    work = r1 + buffs.get(worker["type"], 0)
-    return work, f"1d6: {r1}"
+    r = random.randint(lo, hi)
+    work = r + buffs.get(worker["type"], 0)
+    return work, f"{lo}-{hi}: {r}"
 
 
 def _advance_story(game: Game, card: Card, log: list[dict]) -> None:

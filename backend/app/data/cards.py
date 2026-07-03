@@ -128,7 +128,7 @@ def _build_card_definitions():
     defs = []
     for i, raw in enumerate(_STORIES_RAW):
         ctype = TYPE_MAP[raw["type"]]
-        w = raw["w"]
+        w = [max(3, min(10, v)) for v in raw["w"]]
         entry = {
             "key": raw["key"],
             "type": ctype,
