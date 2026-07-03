@@ -101,10 +101,6 @@ class PullCardRequest(BaseModel):
     card_id: uuid.UUID
 
 
-class PullBacklogRequest(BaseModel):
-    card_type: str  # s, f, i
-
-
 class WorkLogEntry(BaseModel):
     type: str
     worker_id: Optional[str] = None
@@ -126,6 +122,7 @@ class StartWorkResponse(BaseModel):
 
 class EndDayModal(BaseModel):
     day: int
+    event_key: str
     title: str
     description: str
     overdue: list[dict]

@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.game import (
     GameCreate, GameResponse, GameListItem,
-    AssignWorkerRequest, PullCardRequest, PullBacklogRequest,
+    AssignWorkerRequest, PullCardRequest,
     StartWorkResponse, EndDayResponse,
 )
 from app.services import game_engine
@@ -69,35 +69,6 @@ async def pull_card(
     current_user: User = Depends(get_current_user),
 ):
     game, error = await game_engine.pull_card(db, game_id, payload.card_id, current_user.id)
-    if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
-    if error:
-        raise HTTPException(status_code=400, detail=error)
-    return game
-
-
-@router.post("/{game_id}/pull-backlog", response_model=GameResponse)
-async def pull_backlog(
-    game_id: uuid.UUID,
-    payload: PullBacklogRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    game, error = await game_engine.pull_backlog(db, game_id, payload.card_type, current_user.id)
-    if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
-    if error:
-        raise HTTPException(status_code=400, detail=error)
-    return game
-
-
-@router.post("/{game_id}/pull-expedite", response_model=GameResponse)
-async def pull_expedite(
-    game_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    game, error = await game_engine.pull_expedite(db, game_id, current_user.id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
     if error:

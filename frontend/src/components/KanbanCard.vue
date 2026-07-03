@@ -1,12 +1,16 @@
 <template>
   <div
+    :draggable="isDraggableSource"
     @click="onCardClick"
+    @dragstart="onCardDragStart"
+    @dragend="onCardDragEnd"
     @dragover="onDragOver"
     @dragenter="onDragEnter"
     @dragleave="onDragLeave"
     @drop="onDrop"
     :class="[
-      'rounded-lg border transition-all duration-200 select-none overflow-hidden cursor-pointer',
+      'rounded-lg border transition-all duration-200 select-none overflow-hidden',
+      isDraggableSource ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
       cardBorderClass,
       card.is_blocked ? 'ring-1 ring-red-500/50' : '',
       ringClass,
@@ -29,20 +33,29 @@
     <div :class="['px-2 pb-2 space-y-1', cardBodyBgClass]">
       <div v-if="card.analysis_total > 0" class="flex items-center gap-1">
         <span class="text-[9px] w-3 text-violet-300/70">🔍</span>
-        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
-          <div class="h-full bg-violet-400 rounded-full transition-all" :style="{ width: analysisPct + '%' }"></div>
+        <div class="flex-1 flex flex-wrap items-center gap-0.5">
+          <span
+            v-for="(filled, i) in analysisDots" :key="i"
+            :class="['w-1.5 h-1.5 rounded-full transition-colors', filled ? 'bg-violet-400' : 'bg-black/30']"
+          ></span>
         </div>
       </div>
       <div v-if="card.dev_total > 0" class="flex items-center gap-1">
         <span class="text-[9px] w-3 text-sky-300/70">💻</span>
-        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
-          <div class="h-full bg-sky-400 rounded-full transition-all" :style="{ width: devPct + '%' }"></div>
+        <div class="flex-1 flex flex-wrap items-center gap-0.5">
+          <span
+            v-for="(filled, i) in devDots" :key="i"
+            :class="['w-1.5 h-1.5 rounded-full transition-colors', filled ? 'bg-sky-400' : 'bg-black/30']"
+          ></span>
         </div>
       </div>
       <div v-if="card.test_total > 0" class="flex items-center gap-1">
         <span class="text-[9px] w-3 text-amber-300/70">🧪</span>
-        <div class="flex-1 h-1 bg-black/30 rounded-full overflow-hidden">
-          <div class="h-full bg-amber-400 rounded-full transition-all" :style="{ width: testPct + '%' }"></div>
+        <div class="flex-1 flex flex-wrap items-center gap-0.5">
+          <span
+            v-for="(filled, i) in testDots" :key="i"
+            :class="['w-1.5 h-1.5 rounded-full transition-colors', filled ? 'bg-amber-400' : 'bg-black/30']"
+          ></span>
         </div>
       </div>
 
@@ -83,17 +96,23 @@
         Drop to assign
       </div>
 
-      <button
-        v-if="pullable && store.canPlan()"
-        @click.stop="store.pullCard(card.id)"
-        class="w-full mt-0.5 py-0.5 text-[9px] font-semibold rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700/40 hover:bg-emerald-800/60"
-      >
-        {{ t('card.pull') }} →
-      </button>
-
       <div v-if="card.due_day" class="text-[9px] text-white/50">
         {{ t('card.due') }} {{ t('card.day', { day: card.due_day }) }}
       </div>
+
+      <button
+        v-if="showPullButton"
+        @click.stop="store.pullCard(card.id)"
+        :disabled="!canPullToReady"
+        :class="[
+          'w-full text-[9px] py-0.5 rounded font-semibold transition-colors',
+          canPullToReady
+            ? 'bg-emerald-700/60 text-emerald-100 hover:bg-emerald-600/70 cursor-pointer'
+            : 'bg-slate-700/40 text-slate-500 cursor-not-allowed',
+        ]"
+      >
+        {{ t('card.pullToReady') }}
+      </button>
     </div>
   </div>
 </template>
@@ -111,7 +130,6 @@ const store = useGameStore()
 const props = defineProps({
   card: Object,
   columnKey: String,
-  pullable: Boolean,
 })
 
 const isDragOver = ref(false)
@@ -127,6 +145,17 @@ const hasWorkers = computed(() => assignedWorkers.value.length > 0)
 
 const isDropTarget = computed(() =>
   store.isActiveWorkColumn(props.columnKey) && store.canPlan()
+)
+
+const isDraggableSource = computed(() =>
+  store.isDraggableCardColumn(props.columnKey) && store.canPlan() && !store.loading
+)
+
+const showPullButton = computed(() =>
+  props.columnKey === 'backlog' || props.columnKey === 'exp_backlog'
+)
+const canPullToReady = computed(() =>
+  showPullButton.value && store.canPullCard(props.columnKey)
 )
 
 const isSelectedTarget = computed(() =>
@@ -160,18 +189,13 @@ const headerValueClass = computed(() => {
   return 'text-emerald-300'
 })
 
-const analysisPct = computed(() => {
-  if (!props.card.analysis_total) return 100
-  return ((props.card.analysis_total - props.card.analysis_remaining) / props.card.analysis_total) * 100
-})
-const devPct = computed(() => {
-  if (!props.card.dev_total) return 100
-  return ((props.card.dev_total - props.card.dev_remaining) / props.card.dev_total) * 100
-})
-const testPct = computed(() => {
-  if (!props.card.test_total) return 100
-  return ((props.card.test_total - props.card.test_remaining) / props.card.test_total) * 100
-})
+function dotStates(total, remaining) {
+  const filled = Math.max(0, Math.min(total, Math.round(total - remaining)))
+  return Array.from({ length: total }, (_, i) => i < filled)
+}
+const analysisDots = computed(() => dotStates(props.card.analysis_total, props.card.analysis_remaining))
+const devDots = computed(() => dotStates(props.card.dev_total, props.card.dev_remaining))
+const testDots = computed(() => dotStates(props.card.test_total, props.card.test_remaining))
 const blockerPct = computed(() => {
   if (!props.card.blocker_total) return 0
   return ((props.card.blocker_total - props.card.blocker_remaining) / props.card.blocker_total) * 100
@@ -208,6 +232,21 @@ function workerBadgeCls(type) {
 }
 
 // ── Drag & drop ──────────────────────────────────────────────────────────────
+
+function onCardDragStart(event) {
+  if (!isDraggableSource.value) {
+    event.preventDefault()
+    return
+  }
+  event.dataTransfer.setData('cardId', props.card.id)
+  event.dataTransfer.setData('text/plain', `card:${props.card.id}`)
+  event.dataTransfer.effectAllowed = 'move'
+  store.startDragCard(props.card.id, props.columnKey)
+}
+
+function onCardDragEnd() {
+  store.stopDragCard()
+}
 
 function onDragOver(event) {
   if (!isDropTarget.value || !store.draggingWorkerId) return

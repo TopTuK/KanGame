@@ -18,6 +18,19 @@ const ACTIVE_WORK = new Set([
   'analysis', 'development', 'test',
   'exp_analysis', 'exp_development', 'exp_test',
 ])
+const CARD_DRAG_SOURCES = new Set([...PULLABLE, 'backlog', 'exp_backlog'])
+// Mirrors the backend's PULL_WIP_KEYS — which wipCounts/wip_limits entry
+// gates a card leaving this column.
+const CARD_WIP_KEYS = {
+  backlog: 'ready',
+  ready: 'analysis',
+  analysis_done: 'development',
+  dev_done: 'test',
+  exp_backlog: 'expedite',
+  exp_ready: 'exp_analysis',
+  exp_analysis_done: 'exp_development',
+  exp_dev_done: 'exp_test',
+}
 
 export const useGameStore = defineStore('game', () => {
   const game = ref(null)
@@ -25,6 +38,7 @@ export const useGameStore = defineStore('game', () => {
   const error = ref(null)
   const selectedWorkerIds = ref([])
   const draggingWorkerId = ref(null)
+  const draggingCard = ref(null) // { id, fromColumn, toColumn } | null
   const workLog = ref([])
   const endDayModal = ref(null)
   const showWorkLog = ref(false)
@@ -34,9 +48,10 @@ export const useGameStore = defineStore('game', () => {
     const map = {}
     const all = [...STANDARD_COLUMNS, ...EXPEDITE_COLUMNS, 'hidden', 'removed']
     for (const col of all) {
-      map[col] = game.value.cards
-        .filter(c => c.column === col)
-        .sort((a, b) => a.sort_order - b.sort_order)
+      const inColumn = game.value.cards.filter(c => c.column === col)
+      map[col] = col === 'backlog' || col === 'exp_backlog'
+        ? inColumn.sort((a, b) => b.val - a.val)
+        : inColumn.sort((a, b) => a.sort_order - b.sort_order)
     }
     return map
   })
@@ -68,11 +83,43 @@ export const useGameStore = defineStore('game', () => {
       exp_analysis: count(['exp_analysis', 'exp_analysis_done']),
       exp_development: count(['exp_development', 'exp_dev_done']),
       exp_test: count(['exp_test']),
+      expedite: count(['exp_ready']),
     }
   })
 
   function isPullableColumn(col) {
     return PULLABLE.has(col)
+  }
+
+  function nextColumnFor(col) {
+    for (const arr of [STANDARD_COLUMNS, EXPEDITE_COLUMNS]) {
+      const idx = arr.indexOf(col)
+      if (idx >= 0 && idx + 1 < arr.length) return arr[idx + 1]
+    }
+    return null
+  }
+
+  function isDraggableCardColumn(col) {
+    return CARD_DRAG_SOURCES.has(col)
+  }
+
+  function canDropOnColumn(targetColumn) {
+    if (!draggingCard.value || draggingCard.value.toColumn !== targetColumn) return false
+    const wipKey = CARD_WIP_KEYS[draggingCard.value.fromColumn]
+    if (!wipKey) return true
+    const limit = game.value?.wip_limits?.[wipKey]
+    if (limit == null) return true
+    return (wipCounts.value[wipKey] ?? 0) < limit
+  }
+
+  function startDragCard(cardId, fromColumn) {
+    if (!canPlan() || loading.value) return
+    if (!isDraggableCardColumn(fromColumn)) return
+    draggingCard.value = { id: cardId, fromColumn, toColumn: nextColumnFor(fromColumn) }
+  }
+
+  function stopDragCard() {
+    draggingCard.value = null
   }
 
   function isActiveWorkColumn(col) {
@@ -81,6 +128,15 @@ export const useGameStore = defineStore('game', () => {
 
   function canPlan() {
     return game.value?.phase === 'planning' && !game.value?.work_done
+  }
+
+  function canPullCard(fromColumn) {
+    if (!canPlan() || loading.value) return false
+    const wipKey = CARD_WIP_KEYS[fromColumn]
+    if (!wipKey) return true
+    const limit = game.value?.wip_limits?.[wipKey]
+    if (limit == null) return true
+    return (wipCounts.value[wipKey] ?? 0) < limit
   }
 
   async function loadGame(id) {
@@ -181,34 +237,6 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  async function pullBacklog(cardType) {
-    if (!game.value) return
-    loading.value = true
-    error.value = null
-    try {
-      const res = await gamesApi.pullBacklog(game.value.id, cardType)
-      game.value = res.data
-    } catch (e) {
-      error.value = e.response?.data?.detail || e.message
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function pullExpedite() {
-    if (!game.value) return
-    loading.value = true
-    error.value = null
-    try {
-      const res = await gamesApi.pullExpedite(game.value.id)
-      game.value = res.data
-    } catch (e) {
-      error.value = e.response?.data?.detail || e.message
-    } finally {
-      loading.value = false
-    }
-  }
-
   async function startWork() {
     if (!game.value) return
     loading.value = true
@@ -253,12 +281,13 @@ export const useGameStore = defineStore('game', () => {
 
   return {
     game, loading, error,
-    selectedWorkerIds, draggingWorkerId, workLog, showWorkLog, endDayModal,
+    selectedWorkerIds, draggingWorkerId, draggingCard, workLog, showWorkLog, endDayModal,
     cardsByColumn, isGameOver, workers, assignedWorkersByCard, wipCounts,
-    isPullableColumn, isActiveWorkColumn, canPlan,
+    isPullableColumn, isActiveWorkColumn, isDraggableCardColumn, canDropOnColumn, canPlan, canPullCard,
     loadGame, selectWorker, clearSelectedWorkers, startDragWorker, stopDragWorker,
+    startDragCard, stopDragCard,
     assignWorker, unassignWorker, assignToCard,
-    pullCard, pullBacklog, pullExpedite,
+    pullCard,
     startWork, endDay, dismissEndDayModal, dismissWorkLog,
     STANDARD_COLUMNS, EXPEDITE_COLUMNS,
   }

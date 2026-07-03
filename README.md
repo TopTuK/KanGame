@@ -4,13 +4,15 @@ An interactive web simulation of Kanban methodology, inspired by [getKanban®](h
 
 > 🤖 **Built with AI assistance** — This project was created with help from [Claude Code](https://claude.ai/code) and [Cursor](https://cursor.com). Architecture, game logic, UI components, and infrastructure were developed through human–AI collaboration.
 
+![KanGame board](kan_scr.png)
+
 ---
 
 ## ✨ Features
 
 - 🎯 **Pull system** — Work is pulled from backlog and between ready/done buffers based on available capacity
 - 🚧 **WIP limits** — Enforce constraints per column (Analysis, Development, Test)
-- 👥 **Resource assignment** — Click or drag workers onto active tasks; distribute the team across different cards or assign several workers to one card; specialists roll 2d6, cross-role workers roll 1d6
+- 👥 **Resource assignment** — Click or drag workers onto active tasks; distribute the team across different cards or assign several workers to one card; each role has its own productivity range per stage (see [📜 Rules of the Game](#-rules-of-the-game))
 - ⚡ **Classes of service** — Standard, expedite, fixed-date, and intangible cards with distinct economic effects
 - 📅 **Daily gameplay loop** — Pull cards, assign resources, start work, review the work log, and end the day
 - 📊 **Metrics** — Track throughput, WIP, deployed work, daily revenue, and cumulative revenue
@@ -57,7 +59,7 @@ The UI never encodes game rules. It renders server state and sends player action
 **Key components:**
 
 - `GameHeader` — day progress, revenue, WIP badges, End Day control
-- `KanbanBoard` / `KanbanColumn` / `KanbanCard` — board layout, per-card pull buttons, worker drop targets
+- `KanbanBoard` / `KanbanColumn` / `KanbanCard` — board layout, drag-and-drop card movement, a "Pull to Ready" button on Backlog cards, worker drop targets
 - `ResourcePanel` — draggable worker pool, multi-select click assignment, Start Work
 - `MetricsPanel` — throughput, WIP, deployed work, and revenue history
 - `HelpModal` / `WorkLogModal` / `EndDayModal` / `ScoreModal` — onboarding, daily work log, day events, and end-game summary
@@ -70,7 +72,7 @@ The UI never encodes game rules. It renders server state and sends player action
 | **API routes** (`api/routes/games.py`) | HTTP endpoints, validation, error handling — every route requires a signed-in user and is scoped to their own games |
 | **Auth routes** (`api/routes/auth.py`) | OIDC login redirect, provider callback, current-user lookup, logout |
 | **Schemas** (`schemas/game.py`, `schemas/user.py`) | Pydantic request/response DTOs |
-| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, dice rolls, revenue, events; every game lookup is filtered by owner |
+| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, work rolls, revenue, events; every game lookup is filtered by owner |
 | **Data definitions** (`data/cards.py`) | Static card deck and daily event catalog |
 | **Models** (`models/game.py`, `models/user.py`) | SQLAlchemy ORM entities |
 | **Core** (`core/`) | Config, async DB session factory, OIDC client (`oauth.py`), `get_current_user` dependency (`auth.py`) |
@@ -94,7 +96,7 @@ The **game engine** is the single source of truth for mechanics:
 - Separate expedite track with its own ready/WIP handling
 - Pull rules and WIP enforcement for ready, active, and done-buffer columns
 - Worker assignment stored in `team_config.workers` (one worker → one card; many workers → same card allowed)
-- Specialist/cross-role dice rolls at work time, blockers, Carlos/lockdown event flags, buffs
+- Role- and stage-specific productivity ranges at work time, blockers, Carlos/lockdown event flags, buffs
 - Revenue, penalties, overdue removals, and metric snapshots at end of day
 
 ### 🗄️ Data Layer
@@ -335,7 +337,7 @@ npm run build
 
 Tests target `http://localhost:8080` by default; override with the `E2E_BASE_URL` env var if you chose different ports.
 
-Current coverage (`backlog-pull.spec.js`): the Backlog column's per-type pull buttons render with live counts, a pull is rejected with the WIP-limit error while Ready is full, and a pull succeeds and moves a card into Ready once a slot is freed.
+Current coverage (`card-drag.spec.js`): dragging a card into a column that's already at its WIP limit is rejected and the card stays put; dragging a card into its next column moves it forward once WIP allows; and dragging a specific Backlog card moves exactly that card rather than the oldest card of its type.
 
 ---
 
@@ -343,9 +345,9 @@ Current coverage (`backlog-pull.spec.js`): the Backlog column's per-type pull bu
 
 0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the new-game form only appears once you're signed in
 1. 🆕 **Start a game** — Enter your name and a game name on the home screen
-2. ↔️ **Pull cards** — Use **Pull →** on cards in Ready and Done-buffer columns to move work forward, respecting WIP limits
+2. ↔️ **Pull cards** — Drag a card into the next column (Ready→Analysis, Analysis Done→Development, Dev Done→Test), or click **↑ Pull to Ready** on a Backlog card, respecting WIP limits
 3. 👥 **Assign resources** — Drag a worker onto an Analysis/Development/Test card, or click one or more workers then click a card; assign each worker to a different task or stack several workers on one task; click an assigned badge to unassign
-4. ▶️ **Start Work** — Roll worker output, reduce remaining analysis/development/test work, and automatically advance completed stages
+4. ▶️ **Start Work** — Resolve each assigned worker's output for the day, reduce remaining analysis/development/test work, and automatically advance completed stages
 5. 🌙 **End the day** — Apply daily events, remove overdue fixed-date/expedite work, record metrics, and advance the calendar
 6. 🏆 **Win condition** — Maximize total revenue from Day 9 through Day 35 while meeting fixed-date commitments and handling expedites
 
@@ -357,6 +359,52 @@ Current coverage (`backlog-pull.spec.js`): the Backlog column's per-type pull bu
 | 🟡 Fixed date | Must deploy by due day or incur penalties |
 | 🔴 Expedite | Uses the expedite track and has its own WIP limit |
 | ⚪ Intangible | Tech debt; no direct revenue |
+
+---
+
+## 📜 Rules of the Game
+
+### 👥 Team & Roles
+
+Three roles — **Analyst**, **Developer**, **Tester** — share a roster of 12 workers (4 per role). A new game starts with 7 of them active (2 analysts, 2 developers, 3 testers); the rest join over time as day events bring people on ("New Developer Hired"), and active workers can also temporarily leave ("Analyst on Vacation", "Tester Out Sick") until a matching event brings them back. Any active worker can be assigned to any card in an active-work column, but each role is most productive in its own stage.
+
+### 🧮 Worker Productivity
+
+Every time you click **Start Work**, each assigned worker rolls a random amount of work in their role's range for the card's current stage, and that amount (plus any active buff — see Intangible cards below) is subtracted from the card's remaining points for that stage:
+
+| Stage | Analyst | Developer | Tester |
+|---|---|---|---|
+| Analysis | 1–6 | 1–4 | 1–4 |
+| Development | 1–3 | 3–7 | 2–4 |
+| Testing | 2–5 | 2–5 | 3–7 |
+
+A card automatically advances to its next column once a stage's remaining points reach zero — there's no separate "finish stage" action.
+
+### 🔄 Columns, Pulling & WIP
+
+Flow: **Backlog → Ready → Analysis → Analysis Done → Development → Dev Done → Test → Deployed**, with a parallel Expedite track (**Exp. Backlog → Exp. Ready → Exp. Analysis → Exp. Analysis Done → Exp. Development → Exp. Dev Done → Exp. Test → Exp. Deployed**) that only appears once its expedite card is announced. A card can move only one column at a time, and only into a column that's under its WIP limit. Starting limits: **Ready 5 · Analysis 3 · Development 5 · Test 3 · Expedite 1** — some day events change these mid-game.
+
+### 💰 Revenue, Bonuses & Penalties
+
+- **Standard** cards pay their full value once, the moment they're deployed.
+- **Fixed-date** and **Expedite** cards each carry a due day: deploying on or before it pays a bonus (or simply earns the card's value); deploying late — or still being in the pipeline when the due day passes — applies that card's penalty and, if it never deployed in time, removes it from the board entirely.
+- **Intangible** cards earn no revenue. Deploying one instead grants a permanent +1 bonus added to every future work roll for one role (analyst, developer, or tester, per card) — a standing investment in team efficiency rather than a cash payout.
+
+### 🎲 Day Events
+
+Ending a day (Day 9 through Day 35) triggers that day's scripted event: a worker leaving or returning, a blocker appearing on the first card in Test or Development (any worker can clear it, but that story can't progress until it's cleared), a WIP-limit change, the "Carlos" testing-quality policy toggling on/off, a late-game "specialization lockdown" notice, and the four Expedite cards being announced with their own deadlines and payouts. Event notifications are shown in your selected UI language (see [🌐 Localization](#-localization)).
+
+### 🏆 Scoring
+
+The game ends after Day 35. Your final rank is based on total revenue earned:
+
+| Total revenue | Rank |
+|---|---|
+| ≥ ₽700,000 | 🏆 Kanban Master |
+| ≥ ₽500,000 | 🥇 Flow Expert |
+| ≥ ₽300,000 | 🥈 Lean Practitioner |
+| ≥ ₽150,000 | 🥉 Agile Starter |
+| below ₽150,000 | 📚 Keep Learning |
 
 ---
 
@@ -375,9 +423,7 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 | `GET` | `/api/games` | List the current user's games |
 | `GET` | `/api/games/{id}` | Get game state |
 | `POST` | `/api/games/{id}/assign-worker` | Assign or unassign one worker to/from a card |
-| `POST` | `/api/games/{id}/pull-card` | Pull a card from Ready/Done buffer into the next active stage |
-| `POST` | `/api/games/{id}/pull-backlog` | Pull a standard, fixed-date, or intangible card from Backlog into Ready |
-| `POST` | `/api/games/{id}/pull-expedite` | Pull the next available expedite card into Exp. Ready |
+| `POST` | `/api/games/{id}/pull-card` | Pull one card forward by exactly one column (Backlog→Ready, Ready→Analysis, Analysis Done→Development, Dev Done→Test), subject to the destination's WIP limit |
 | `POST` | `/api/games/{id}/start-work` | Resolve assigned worker output for the day and return the work log |
 | `POST` | `/api/games/{id}/end-day` | Apply day-end events, metrics, overdue checks, and advance the day |
 

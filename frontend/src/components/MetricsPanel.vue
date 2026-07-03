@@ -1,7 +1,5 @@
 <template>
-  <div class="p-4">
-    <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">{{ t('metrics.title') }}</h3>
-
+  <div>
     <!-- Key stats -->
     <div class="grid grid-cols-2 gap-2 mb-4">
       <div v-for="stat in stats" :key="stat.label" class="bg-slate-800/60 rounded-lg p-2.5 text-center border border-slate-700/30">
@@ -19,30 +17,6 @@
         <span class="text-slate-300 font-mono">{{ countByType(type.key) }}</span>
       </div>
     </div>
-
-    <!-- Day history bars -->
-    <div v-if="metrics.length">
-      <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">{{ t('metrics.revenueByDay') }}</div>
-      <div class="space-y-1 max-h-40 overflow-y-auto">
-        <div
-          v-for="m in [...metrics].reverse()"
-          :key="m.day"
-          class="flex items-center gap-2 text-xs"
-        >
-          <span class="text-slate-500 w-8 flex-shrink-0">D{{ m.day }}</span>
-          <div class="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              class="h-full bg-emerald-500 rounded-full transition-all"
-              :style="{ width: maxRevenue ? (m.daily_revenue / maxRevenue * 100) + '%' : '0%' }"
-            ></div>
-          </div>
-          <span class="text-emerald-400 w-20 text-right font-mono text-[10px]">{{ fmtRub(m.daily_revenue) }}</span>
-        </div>
-      </div>
-    </div>
-    <div v-else class="text-xs text-slate-600 text-center py-4">
-      {{ t('metrics.noMetrics') }}
-    </div>
   </div>
 </template>
 
@@ -58,8 +32,8 @@ function fmtRub(n) {
   return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
 }
 
-const metrics = computed(() => store.game?.metrics || [])
 const cards = computed(() => store.game?.cards || [])
+const metrics = computed(() => store.game?.metrics || [])
 
 const deployedCount = computed(() =>
   cards.value.filter(c => ['deployed', 'exp_deployed'].includes(c.column)).length
@@ -79,7 +53,6 @@ const latestThroughput = computed(() => {
   const ms = metrics.value
   return ms.length ? ms[ms.length - 1].throughput : 0
 })
-const maxRevenue = computed(() => Math.max(1, ...metrics.value.map(m => m.daily_revenue)))
 
 const stats = computed(() => [
   { label: t('metrics.revPerDay'),   value: fmtRub(dailyRevenue.value),  color: 'text-emerald-400' },

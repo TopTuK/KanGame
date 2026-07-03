@@ -59,6 +59,10 @@
       <div v-if="store.game" class="flex items-center gap-2 flex-shrink-0">
         <span v-if="store.error" class="text-red-400 text-xs max-w-[200px] truncate">{{ store.error }}</span>
 
+        <button @click="$emit('open-metrics')" class="btn-secondary text-sm py-2 px-4">
+          📊 {{ t('metrics.title') }}
+        </button>
+
         <button
           v-if="store.game.work_done && store.game.phase !== 'completed'"
           @click="store.endDay()"
@@ -81,6 +85,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useGameStore } from '../stores/gameStore.js'
 
+defineEmits(['open-metrics'])
 const { t } = useI18n()
 const store = useGameStore()
 
