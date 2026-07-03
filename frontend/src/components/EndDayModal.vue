@@ -3,10 +3,10 @@
     <div class="bg-slate-900 border border-slate-600 rounded-2xl max-w-lg w-full shadow-2xl">
       <div class="px-6 py-4 border-b border-slate-700">
         <div class="text-xs text-slate-500 uppercase tracking-wider">{{ t('eventModal.day') }} {{ modal.day }}</div>
-        <h2 class="text-xl font-bold text-white mt-1">{{ modal.title }}</h2>
+        <h2 class="text-xl font-bold text-white mt-1">{{ eventTitle(modal) }}</h2>
       </div>
       <div class="px-6 py-5 text-sm text-slate-300 whitespace-pre-line leading-relaxed max-h-64 overflow-y-auto">
-        {{ modal.description }}
+        {{ eventDescription(modal) }}
       </div>
       <div v-if="modal.overdue?.length" class="px-6 pb-4">
         <p class="text-red-400 font-semibold text-sm mb-2">{{ t('endDay.overdueTitle') }}</p>
@@ -26,9 +26,11 @@
 
 <script setup>
 import { useI18n } from 'vue-i18n'
+import { useGameContent } from '../composables/useGameContent.js'
 defineProps({ modal: Object })
 defineEmits(['close'])
 const { t } = useI18n()
+const { eventTitle, eventDescription } = useGameContent()
 
 function fmtRub(n) {
   return Number(n || 0).toLocaleString('ru-RU') + ' ₽'

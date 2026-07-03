@@ -122,6 +122,7 @@ class StartWorkResponse(BaseModel):
 
 class EndDayModal(BaseModel):
     day: int
+    event_key: str
     title: str
     description: str
     overdue: list[dict]

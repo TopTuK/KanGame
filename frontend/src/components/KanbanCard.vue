@@ -99,6 +99,20 @@
       <div v-if="card.due_day" class="text-[9px] text-white/50">
         {{ t('card.due') }} {{ t('card.day', { day: card.due_day }) }}
       </div>
+
+      <button
+        v-if="showPullButton"
+        @click.stop="store.pullCard(card.id)"
+        :disabled="!canPullToReady"
+        :class="[
+          'w-full text-[9px] py-0.5 rounded font-semibold transition-colors',
+          canPullToReady
+            ? 'bg-emerald-700/60 text-emerald-100 hover:bg-emerald-600/70 cursor-pointer'
+            : 'bg-slate-700/40 text-slate-500 cursor-not-allowed',
+        ]"
+      >
+        {{ t('card.pullToReady') }}
+      </button>
     </div>
   </div>
 </template>
@@ -135,6 +149,13 @@ const isDropTarget = computed(() =>
 
 const isDraggableSource = computed(() =>
   store.isDraggableCardColumn(props.columnKey) && store.canPlan() && !store.loading
+)
+
+const showPullButton = computed(() =>
+  props.columnKey === 'backlog' || props.columnKey === 'exp_backlog'
+)
+const canPullToReady = computed(() =>
+  showPullButton.value && store.canPullCard(props.columnKey)
 )
 
 const isSelectedTarget = computed(() =>

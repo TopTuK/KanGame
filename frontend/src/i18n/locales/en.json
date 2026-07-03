@@ -113,6 +113,7 @@
     "expedite": "EXPEDITE",
     "deadline": "DEADLINE",
     "dropHere": "Drop here",
+    "pullToReady": "↑ Pull to Ready",
     "assignMember": "+ assign member",
     "ptsEfficiency": "+{pts} pts · {eff}",
     "due": "Due:",
@@ -203,7 +204,7 @@
     "intro": "You start on Day 9 with stories already in progress. Each day: assign workers, drag cards, Start Work, then End Day.",
     "pull": "Drag cards to their next column to move them forward — including from the Backlog into Ready",
     "assign": "Click one or more workers, then click a card in Analysis, Development, or Test",
-    "startWork": "Start Work rolls dice (2d6 specialist, 1d6 cross-role) and advances completed stages",
+    "startWork": "Start Work applies each worker's role-based productivity range and advances completed stages",
     "endDay": "End Day applies events, checks deadlines, and advances the calendar",
     "f1deadline": "Remember: F1 must be deployed by end of Day 15!",
     "gotIt": "Let's play!"

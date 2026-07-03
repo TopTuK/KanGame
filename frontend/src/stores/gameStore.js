@@ -48,9 +48,10 @@ export const useGameStore = defineStore('game', () => {
     const map = {}
     const all = [...STANDARD_COLUMNS, ...EXPEDITE_COLUMNS, 'hidden', 'removed']
     for (const col of all) {
-      map[col] = game.value.cards
-        .filter(c => c.column === col)
-        .sort((a, b) => a.sort_order - b.sort_order)
+      const inColumn = game.value.cards.filter(c => c.column === col)
+      map[col] = col === 'backlog' || col === 'exp_backlog'
+        ? inColumn.sort((a, b) => b.val - a.val)
+        : inColumn.sort((a, b) => a.sort_order - b.sort_order)
     }
     return map
   })
@@ -127,6 +128,15 @@ export const useGameStore = defineStore('game', () => {
 
   function canPlan() {
     return game.value?.phase === 'planning' && !game.value?.work_done
+  }
+
+  function canPullCard(fromColumn) {
+    if (!canPlan() || loading.value) return false
+    const wipKey = CARD_WIP_KEYS[fromColumn]
+    if (!wipKey) return true
+    const limit = game.value?.wip_limits?.[wipKey]
+    if (limit == null) return true
+    return (wipCounts.value[wipKey] ?? 0) < limit
   }
 
   async function loadGame(id) {
@@ -273,7 +283,7 @@ export const useGameStore = defineStore('game', () => {
     game, loading, error,
     selectedWorkerIds, draggingWorkerId, draggingCard, workLog, showWorkLog, endDayModal,
     cardsByColumn, isGameOver, workers, assignedWorkersByCard, wipCounts,
-    isPullableColumn, isActiveWorkColumn, isDraggableCardColumn, canDropOnColumn, canPlan,
+    isPullableColumn, isActiveWorkColumn, isDraggableCardColumn, canDropOnColumn, canPlan, canPullCard,
     loadGame, selectWorker, clearSelectedWorkers, startDragWorker, stopDragWorker,
     startDragCard, stopDragCard,
     assignWorker, unassignWorker, assignToCard,

@@ -553,6 +553,7 @@ async def end_day(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> t
 
     modal = {
         "day": completed_day,
+        "event_key": event_data.get("key", ""),
         "title": event_data.get("title", ""),
         "description": event_data.get("description", ""),
         "overdue": [{"card_key": c.card_key, "due_day": c.due_day, "val": c.val} for c in overdue],
