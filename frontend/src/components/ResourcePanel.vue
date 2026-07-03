@@ -4,7 +4,7 @@
       <template v-if="store.canPlan()">
         <span class="text-violet-400 font-semibold block mb-0.5">{{ t('resources.planning') }}</span>
         {{ t('resources.planningHint') }}
-        <span class="block text-slate-500">{{ t('resources.moveHint') }}</span>
+        <!--<span class="block text-slate-500">{{ t('resources.moveHint') }}</span>-->
       </template>
       <template v-else-if="store.game?.work_done">
         <span class="text-emerald-400 font-semibold block mb-0.5">{{ t('resources.workDone') }}</span>

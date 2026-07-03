@@ -2,11 +2,11 @@
   <div class="flex flex-col gap-3 min-h-full min-w-max pb-2">
     <!-- Expedite track -->
     <div class="flex items-start gap-2">
-      <div class="flex-shrink-0 w-16 flex items-center justify-center">
+      <!--<div class="flex-shrink-0 w-16 flex items-center justify-center">
         <span class="text-xs font-bold text-red-400 uppercase tracking-wider -rotate-90 whitespace-nowrap">
           {{ t('board.expediteTrack') }}
         </span>
-      </div>
+      </div>-->
       <KanbanColumn
         v-for="col in expediteColumns"
         :key="col.key"
