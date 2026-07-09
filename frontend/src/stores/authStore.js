@@ -28,5 +28,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, checked, isAuthenticated, fetchMe, logout }
+  async function updateUsername(username) {
+    const res = await authApi.updateMe({ username })
+    user.value = res.data
+  }
+
+  return { user, checked, isAuthenticated, fetchMe, logout, updateUsername }
 })

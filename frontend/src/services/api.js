@@ -20,6 +20,7 @@ export const gamesApi = {
 export const authApi = {
   me: () => api.get('/auth/me'),
   logout: () => api.post('/auth/logout'),
+  updateMe: (data) => api.patch('/auth/me', data),
 }
 
 export default api

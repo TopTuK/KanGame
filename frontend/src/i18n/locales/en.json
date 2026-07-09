@@ -26,7 +26,15 @@
     "signOut": "Sign out",
     "signIn": "Sign in",
     "signInPrompt": "Sign in to play",
-    "signInPromptDesc": "You need to sign in before you can start or resume a game."
+    "signInPromptDesc": "You need to sign in before you can start or resume a game.",
+    "signedInAs": "Signed in as {username}",
+    "editUsername": "Edit username",
+    "usernameSave": "Save",
+    "usernameCancel": "Cancel",
+    "authorLink": "Sergey Sidorov",
+    "authorLinkDesc": "Moscow-based project manager and product developer — Scrum, Kanban, SAFe, Lean, PMBOK, plus .NET/Python/Flutter/AI. Portfolio, blog, and open-source projects.",
+    "communityLink": "PM Russia Club",
+    "communityLinkDesc": "A closed community for project, program, and portfolio managers — forums, expert AMAs, meetups, and mentoring, built around real peer discussion rather than social media."
   },
   "game": {
     "loading": "Loading game…",
