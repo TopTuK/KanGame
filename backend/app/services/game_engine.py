@@ -45,9 +45,9 @@ ACTIVE_WORK_LANES = [
 ]
 
 PIPELINE_AGE_LANES = [
-    "ready", "analysis", "analysis_done", "development", "dev_done", "test",
+    "ready", "analysis", "analysis_done", "development", "dev_done", "test", "test_done",
     "exp_ready", "exp_analysis", "exp_analysis_done",
-    "exp_development", "exp_dev_done", "exp_test",
+    "exp_development", "exp_dev_done", "exp_test", "exp_test_done",
 ]
 
 WORK_LANE_ORDER = [
@@ -279,6 +279,9 @@ async def pull_card(
     if from_col in ("backlog", "exp_backlog"):
         card.entered_day = game.current_day
         card.age = 0
+    elif to_col_str in ("deployed", "exp_deployed"):
+        card.deployed_day = game.current_day
+        _apply_deploy_bonuses(game, card, [])
 
     await db.commit()
     return await get_game(db, game_id, user_id), None
@@ -429,9 +432,9 @@ def _stage_complete(card: Card, bar: int) -> bool:
 
 def _find_overdue(game: Game, day: int) -> list[Card]:
     active_lanes = [
-        "ready", "analysis", "analysis_done", "development", "dev_done", "test",
+        "ready", "analysis", "analysis_done", "development", "dev_done", "test", "test_done",
         "exp_backlog", "exp_ready", "exp_analysis", "exp_analysis_done",
-        "exp_development", "exp_dev_done", "exp_test",
+        "exp_development", "exp_dev_done", "exp_test", "exp_test_done",
     ]
     return [
         c for c in game.cards

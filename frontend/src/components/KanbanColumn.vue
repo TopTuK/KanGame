@@ -1,6 +1,6 @@
 <template>
   <div :class="['flex flex-col flex-shrink-0', column.pullable ? 'w-36' : 'w-44']">
-    <div :class="['rounded-t-xl px-2 py-2 flex items-center justify-between', headerClass]">
+    <div v-if="!bare" :class="['rounded-t-xl px-2 py-2 flex items-center justify-between', headerClass]">
       <div class="flex items-center gap-1.5 min-w-0">
         <span class="text-sm">{{ column.icon }}</span>
         <div class="min-w-0">
@@ -11,6 +11,10 @@
         {{ displayWip }}
       </div>
       <div v-else-if="!column.wipLimit" class="text-xs font-mono text-white/60">{{ cards.length }}</div>
+    </div>
+    <div v-else class="px-1.5 py-1 flex items-center justify-between text-white/50">
+      <span class="text-xs">{{ column.icon }}</span>
+      <div class="text-[10px] font-mono text-white/50">{{ cards.length }}</div>
     </div>
 
     <div
@@ -60,6 +64,7 @@ const props = defineProps({
   column: Object,
   cards: Array,
   wipCount: Number,
+  bare: { type: Boolean, default: false },
 })
 
 const isCardDragOver = ref(false)

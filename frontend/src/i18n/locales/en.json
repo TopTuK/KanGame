@@ -53,6 +53,7 @@
     "development": { "label": "Development", "description": "WIP: {limit}" },
     "devDone": { "label": "Dev Done", "description": "Pull → Test" },
     "test": { "label": "Test", "description": "WIP: {limit}" },
+    "testDone": { "label": "Test Done", "description": "Pull → Deploy" },
     "deployed": { "label": "Deployed", "description": "Earning ₽" },
     "expBacklog": { "label": "Exp. Backlog", "description": "Hidden expedite" },
     "expReady": { "label": "Exp. Ready", "description": "Expedite WIP: {limit}" },
@@ -61,6 +62,7 @@
     "expDevelopment": { "label": "Exp. Dev", "description": "" },
     "expDevDone": { "label": "Exp. D-Done", "description": "" },
     "expTest": { "label": "Exp. Test", "description": "" },
+    "expTestDone": { "label": "Exp. T-Done", "description": "" },
     "expDeployed": { "label": "Exp. Deployed", "description": "" },
     "options": { "label": "Backlog", "description": "Backlog" },
     "dropCards": "Drop cards here"

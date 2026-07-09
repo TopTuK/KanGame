@@ -4,15 +4,15 @@ import { gamesApi } from '../services/api.js'
 
 const STANDARD_COLUMNS = [
   'backlog', 'ready', 'analysis', 'analysis_done',
-  'development', 'dev_done', 'test', 'deployed',
+  'development', 'dev_done', 'test', 'test_done', 'deployed',
 ]
 const EXPEDITE_COLUMNS = [
   'exp_backlog', 'exp_ready', 'exp_analysis', 'exp_analysis_done',
-  'exp_development', 'exp_dev_done', 'exp_test', 'exp_deployed',
+  'exp_development', 'exp_dev_done', 'exp_test', 'exp_test_done', 'exp_deployed',
 ]
 const PULLABLE = new Set([
-  'ready', 'analysis_done', 'dev_done',
-  'exp_ready', 'exp_analysis_done', 'exp_dev_done',
+  'ready', 'analysis_done', 'dev_done', 'test_done',
+  'exp_ready', 'exp_analysis_done', 'exp_dev_done', 'exp_test_done',
 ])
 const ACTIVE_WORK = new Set([
   'analysis', 'development', 'test',
@@ -79,10 +79,10 @@ export const useGameStore = defineStore('game', () => {
       ready: count(['ready']),
       analysis: count(['analysis', 'analysis_done']),
       development: count(['development', 'dev_done']),
-      test: count(['test']),
+      test: count(['test', 'test_done']),
       exp_analysis: count(['exp_analysis', 'exp_analysis_done']),
       exp_development: count(['exp_development', 'exp_dev_done']),
-      exp_test: count(['exp_test']),
+      exp_test: count(['exp_test', 'exp_test_done']),
       expedite: count(['exp_ready']),
     }
   })

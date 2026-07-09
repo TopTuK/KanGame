@@ -40,8 +40,8 @@ const deployedCount = computed(() =>
 )
 const totalWip = computed(() =>
   cards.value.filter(c =>
-    ['analysis', 'analysis_done', 'development', 'dev_done', 'test',
-     'exp_analysis', 'exp_analysis_done', 'exp_development', 'exp_dev_done', 'exp_test'].includes(c.column)
+    ['analysis', 'analysis_done', 'development', 'dev_done', 'test', 'test_done',
+     'exp_analysis', 'exp_analysis_done', 'exp_development', 'exp_dev_done', 'exp_test', 'exp_test_done'].includes(c.column)
   ).length
 )
 const dailyRevenue = computed(() =>

@@ -412,20 +412,22 @@ PULL_MOVES = {
     "ready": "analysis",
     "analysis_done": "development",
     "dev_done": "test",
+    "test_done": "deployed",
     "exp_backlog": "exp_ready",
     "exp_ready": "exp_analysis",
     "exp_analysis_done": "exp_development",
     "exp_dev_done": "exp_test",
+    "exp_test_done": "exp_deployed",
 }
 
 # Auto-advance map: from active column → done/deployed
 ADVANCE_MAP = {
     "analysis": "analysis_done",
     "development": "dev_done",
-    "test": "deployed",
+    "test": "test_done",
     "exp_analysis": "exp_analysis_done",
     "exp_development": "exp_dev_done",
-    "exp_test": "exp_deployed",
+    "exp_test": "exp_test_done",
 }
 
 # WIP lane groups
@@ -433,10 +435,10 @@ WIP_GROUPS = {
     "ready": ["ready"],
     "analysis": ["analysis", "analysis_done"],
     "development": ["development", "dev_done"],
-    "test": ["test"],
+    "test": ["test", "test_done"],
     "exp_analysis": ["exp_analysis", "exp_analysis_done"],
     "exp_development": ["exp_development", "exp_dev_done"],
-    "exp_test": ["exp_test"],
+    "exp_test": ["exp_test", "exp_test_done"],
     "expedite": ["exp_ready"],
 }
 

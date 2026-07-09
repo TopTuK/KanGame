@@ -53,6 +53,7 @@
     "development": { "label": "Разработка", "description": "WIP: {limit}" },
     "devDone": { "label": "Разраб. готово", "description": "→ Тест" },
     "test": { "label": "Тест", "description": "WIP: {limit}" },
+    "testDone": { "label": "Тест готово", "description": "→ Деплой" },
     "deployed": { "label": "Выпущено", "description": "Доход ₽" },
     "expBacklog": { "label": "Бэклог", "description": "" },
     "expReady": { "label": "Готово", "description": "WIP: {limit}" },
@@ -61,6 +62,7 @@
     "expDevelopment": { "label": "Разработка", "description": "" },
     "expDevDone": { "label": "Разработка готово", "description": "" },
     "expTest": { "label": "Тест", "description": "" },
+    "expTestDone": { "label": "Тест готово", "description": "" },
     "expDeployed": { "label": "Выпущено", "description": "" },
     "options": { "label": "Бэклог", "description": "Бэклог" },
     "dropCards": "Перетащите карточки сюда"

@@ -86,7 +86,7 @@ const deployedCount = computed(() =>
 )
 const totalWip = computed(() =>
   cards.value.filter(c =>
-    ['analysis', 'analysis_done', 'development', 'dev_done', 'test'].includes(c.column)
+    ['analysis', 'analysis_done', 'development', 'dev_done', 'test', 'test_done'].includes(c.column)
   ).length
 )
 const avgThroughput = computed(() => {
