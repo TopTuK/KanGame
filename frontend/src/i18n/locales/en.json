@@ -34,7 +34,17 @@
     "authorLink": "Sergey Sidorov",
     "authorLinkDesc": "Moscow-based project manager and product developer — Scrum, Kanban, SAFe, Lean, PMBOK, plus .NET/Python/Flutter/AI. Portfolio, blog, and open-source projects.",
     "communityLink": "PM Russia Club",
-    "communityLinkDesc": "A closed community for project, program, and portfolio managers — forums, expert AMAs, meetups, and mentoring, built around real peer discussion rather than social media."
+    "communityLinkDesc": "A closed community for project, program, and portfolio managers — forums, expert AMAs, meetups, and mentoring, built around real peer discussion rather than social media.",
+    "leaderboardLink": "Leaderboard",
+    "leaderboardLinkDesc": "See the top 5 players with the highest profit"
+  },
+  "leaderboard": {
+    "title": "Leaderboard",
+    "subtitle": "Top 5 players with the highest profit from a completed game",
+    "loading": "Loading leaderboard…",
+    "error": "Failed to load the leaderboard. Please try again later.",
+    "empty": "No completed games yet. Be the first!",
+    "backHome": "← Back to home"
   },
   "game": {
     "loading": "Loading game…",

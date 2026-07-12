@@ -5,11 +5,12 @@ import random
 import uuid
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.game import Game, Card, GameEvent, GameMetric, GameStatus, CardColumn
+from app.models.user import User
 from app.data.cards import (
     CARD_DEFINITIONS,
     EVENT_DEFINITIONS,
@@ -222,6 +223,25 @@ async def get_all_games(db: AsyncSession, user_id: uuid.UUID) -> list[Game]:
         select(Game).where(Game.user_id == user_id).order_by(Game.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def get_top_leaderboard(db: AsyncSession, limit: int = 5) -> list[dict]:
+    subq = (
+        select(Game.user_id, func.max(Game.total_revenue).label("best_revenue"))
+        .where(Game.status == GameStatus.completed)
+        .group_by(Game.user_id)
+        .subquery()
+    )
+    result = await db.execute(
+        select(User.username, User.name, subq.c.best_revenue)
+        .join(subq, subq.c.user_id == User.id)
+        .order_by(subq.c.best_revenue.desc())
+        .limit(limit)
+    )
+    return [
+        {"name": username or name or "Anonymous", "profit": profit}
+        for username, name, profit in result.all()
+    ]
 
 
 async def assign_worker(

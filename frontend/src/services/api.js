@@ -23,4 +23,8 @@ export const authApi = {
   updateMe: (data) => api.patch('/auth/me', data),
 }
 
+export const leaderboardApi = {
+  top: () => api.get('/leaderboard'),
+}
+
 export default api

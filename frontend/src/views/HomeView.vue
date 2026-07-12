@@ -151,7 +151,15 @@
     </div>
 
     <!-- External links -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl w-full mx-auto mt-12 mb-4 animate-fade-in px-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl w-full mx-auto mt-12 mb-4 animate-fade-in px-4">
+      <router-link
+        to="/leaderboard"
+        class="glass glass-hover rounded-2xl p-6 flex flex-col items-center text-center"
+      >
+        <div class="w-12 h-12 mb-3 rounded-xl bg-amber-500/10 flex items-center justify-center text-2xl">🏆</div>
+        <h3 class="font-display font-semibold text-white mb-1">{{ t('home.leaderboardLink') }}</h3>
+        <p class="text-sm text-slate-400">{{ t('home.leaderboardLinkDesc') }}</p>
+      </router-link>
       <a
         href="https://s-sidorov.ru"
         target="_blank"

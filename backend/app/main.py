@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.username import resolve_initial_username
 from app.models.user import User
-from app.api.routes import games, auth
+from app.api.routes import games, auth, leaderboard
 
 app = FastAPI(title="KanGame API", version="1.0.0", docs_url="/api/docs")
 
@@ -69,6 +69,7 @@ async def startup():
 
 app.include_router(games.router, prefix="/api/games", tags=["games"])
 app.include_router(auth.router, tags=["auth"])
+app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["leaderboard"])
 
 
 @app.get("/health")
