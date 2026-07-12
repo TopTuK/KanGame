@@ -153,6 +153,7 @@ User clicks Start Work
 | 🔐 Auth | Authlib (OIDC client), Starlette `SessionMiddleware` (signed session cookies) |
 | 🗄️ Database | PostgreSQL 16 |
 | 🐳 Infra | Docker Compose, Nginx |
+| 🧪 Testing | pytest (backend business logic), Playwright (e2e), GitHub Actions (CI) |
 
 ---
 
@@ -160,8 +161,10 @@ User clicks Start Work
 
 ```
 KanGame2/
+├── .github/workflows/    # CI (backend-tests.yml: pytest on PRs into main)
 ├── backend/              # FastAPI API and game engine
 │   ├── certs/            # Local self-signed TLS cert (gitignored, generated — see Quick Start)
+│   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
 │   └── app/
 │       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py)
 │       ├── core/         # Config, database, OIDC client (oauth.py), get_current_user (auth.py)
@@ -308,6 +311,23 @@ npm run build
 
 ## 🧪 Testing
 
+### Backend business logic (pytest)
+
+`backend/tests/` exercises the game engine directly (no browser, no running server): WIP limits, worker/card eligibility rules, deploy bonuses & penalties, day-event effects, blockers, overdue handling, and the full create → assign → pull → work → end-day lifecycle against a real Postgres instance.
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -r requirements-dev.txt
+```
+
+Point `DATABASE_URL` at a scratch Postgres database (tests create/drop tables and delete all rows on every run — never point it at your dev database):
+
+```bash
+export DATABASE_URL=postgresql+asyncpg://kanban:kanban@localhost:5432/kanban_test
+pytest -v
+```
+
 ### End-to-end (Playwright)
 
 `frontend/e2e/` drives the real app in a browser against a running stack. Sign-in normally goes through an external OIDC provider that automated tests can't complete, so the suite authenticates via the test-only `POST /api/dev/test-login` endpoint described in [🔐 Authentication](#-authentication) — it's gated by `ENABLE_TEST_LOGIN` and 404s unless that flag is set.
@@ -340,6 +360,10 @@ npm run build
 Tests target `http://localhost:8080` by default; override with the `E2E_BASE_URL` env var if you chose different ports.
 
 Current coverage (`card-drag.spec.js`): dragging a card into a column that's already at its WIP limit is rejected and the card stays put; dragging a card into its next column moves it forward once WIP allows; and dragging a specific Backlog card moves exactly that card rather than the oldest card of its type.
+
+### Continuous Integration
+
+[`.github/workflows/backend-tests.yml`](.github/workflows/backend-tests.yml) runs the pytest suite above against a Postgres 16 service container on every pull request into `main` that touches `backend/**`. Mark it as a required status check in the branch protection settings for `main` if PRs shouldn't merge on a red build.
 
 ---
 
