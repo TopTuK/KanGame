@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from sqlalchemy import text
+from sqlalchemy import text, select
 
 from app.core.config import settings
-from app.core.database import engine, Base
-from app.api.routes import games, auth
+from app.core.database import engine, Base, AsyncSessionLocal
+from app.core.username import resolve_initial_username
+from app.models.user import User
+from app.api.routes import games, auth, leaderboard
 
 app = FastAPI(title="KanGame API", version="1.0.0", docs_url="/api/docs")
 
@@ -44,6 +46,7 @@ async def startup():
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS work_done BOOLEAN DEFAULT FALSE",
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS carlos_policy BOOLEAN DEFAULT FALSE",
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS lockdown BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)",
     ]
     async with engine.begin() as conn:
         for sql in migrations:
@@ -55,9 +58,18 @@ async def startup():
         except Exception:
             pass
 
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.username.is_(None)))
+        stale_users = result.scalars().all()
+        for u in stale_users:
+            u.username = resolve_initial_username(u.name, u.email)
+        if stale_users:
+            await session.commit()
+
 
 app.include_router(games.router, prefix="/api/games", tags=["games"])
 app.include_router(auth.router, tags=["auth"])
+app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["leaderboard"])
 
 
 @app.get("/health")

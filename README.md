@@ -18,6 +18,7 @@ An interactive web simulation of Kanban methodology, inspired by [getKanban®](h
 - 📊 **Metrics** — Track throughput, WIP, deployed work, daily revenue, and cumulative revenue
 - 🔐 **Authentication** — Sign in with your organization's OIDC account before starting or resuming a game
 - 💾 **Persistent, per-user games** — Save and resume your own games via PostgreSQL; each player only sees their own
+- 🏆 **Public leaderboard** — Top 5 users by best completed-game revenue, viewable at `/leaderboard` without signing in
 - 🌐 **Localization** — Russian and English UI; Russian is the default; switch language from the header selector (preference saved in the browser)
 
 ---
@@ -48,7 +49,7 @@ The system follows a **classic three-tier layout** with a clear split between pr
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Views** (`HomeView`, `GameView`) | Page-level layout and routing entry points |
+| **Views** (`HomeView`, `GameView`, `LeaderboardView`) | Page-level layout and routing entry points — `LeaderboardView` is the only one reachable without signing in |
 | **Components** | UI building blocks — board, columns, cards, modals, panels |
 | **Pinia store** (`gameStore`) | Client state, derived WIP counts, worker selection, API orchestration |
 | **i18n** (`i18n/`, `useGameContent`) | UI strings and translated card/event text keyed by `card_key` / `event_key` |
@@ -71,8 +72,9 @@ The UI never encodes game rules. It renders server state and sends player action
 |-------|----------------|
 | **API routes** (`api/routes/games.py`) | HTTP endpoints, validation, error handling — every route requires a signed-in user and is scoped to their own games |
 | **Auth routes** (`api/routes/auth.py`) | OIDC login redirect, provider callback, current-user lookup, logout |
-| **Schemas** (`schemas/game.py`, `schemas/user.py`) | Pydantic request/response DTOs |
-| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, work rolls, revenue, events; every game lookup is filtered by owner |
+| **Leaderboard route** (`api/routes/leaderboard.py`) | Public, unauthenticated endpoint — no route dependency requires a session |
+| **Schemas** (`schemas/game.py`, `schemas/user.py`, `schemas/leaderboard.py`) | Pydantic request/response DTOs |
+| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, work rolls, revenue, events; every game lookup is filtered by owner. Also computes the leaderboard (best completed-game revenue per user) |
 | **Data definitions** (`data/cards.py`) | Static card deck and daily event catalog |
 | **Models** (`models/game.py`, `models/user.py`) | SQLAlchemy ORM entities |
 | **Core** (`core/`) | Config, async DB session factory, OIDC client (`oauth.py`), `get_current_user` dependency (`auth.py`) |
@@ -151,6 +153,7 @@ User clicks Start Work
 | 🔐 Auth | Authlib (OIDC client), Starlette `SessionMiddleware` (signed session cookies) |
 | 🗄️ Database | PostgreSQL 16 |
 | 🐳 Infra | Docker Compose, Nginx |
+| 🧪 Testing | pytest (backend business logic), Playwright (e2e), GitHub Actions (CI) |
 
 ---
 
@@ -158,15 +161,17 @@ User clicks Start Work
 
 ```
 KanGame2/
+├── .github/workflows/    # CI (backend-tests.yml: pytest on PRs into main)
 ├── backend/              # FastAPI API and game engine
 │   ├── certs/            # Local self-signed TLS cert (gitignored, generated — see Quick Start)
+│   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
 │   └── app/
-│       ├── api/routes/   # REST routes (games.py, auth.py)
+│       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py)
 │       ├── core/         # Config, database, OIDC client (oauth.py), get_current_user (auth.py)
 │       ├── data/         # Card and event definitions
 │       ├── models/       # SQLAlchemy models (game.py, user.py)
-│       ├── schemas/      # Pydantic DTOs (game.py, user.py)
-│       └── services/     # Game engine logic
+│       ├── schemas/      # Pydantic DTOs (game.py, user.py, leaderboard.py)
+│       └── services/     # Game engine logic (incl. leaderboard query)
 ├── frontend/             # Vue 3 SPA
 │   ├── e2e/               # Playwright end-to-end tests (+ playwright.config.js)
 │   └── src/
@@ -175,7 +180,7 @@ KanGame2/
 │       ├── i18n/         # Locale files (ru, en) and vue-i18n setup
 │       ├── stores/       # Pinia state (gameStore.js, authStore.js)
 │       ├── services/     # API client
-│       └── views/        # Home and game pages
+│       └── views/        # Home, game, and leaderboard pages
 ├── nginx/                # Reverse proxy config
 ├── LICENSE               # MIT license
 ├── docker-compose.yml
@@ -306,6 +311,23 @@ npm run build
 
 ## 🧪 Testing
 
+### Backend business logic (pytest)
+
+`backend/tests/` exercises the game engine directly (no browser, no running server): WIP limits, worker/card eligibility rules, deploy bonuses & penalties, day-event effects, blockers, overdue handling, and the full create → assign → pull → work → end-day lifecycle against a real Postgres instance.
+
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -r requirements-dev.txt
+```
+
+Point `DATABASE_URL` at a scratch Postgres database (tests create/drop tables and delete all rows on every run — never point it at your dev database):
+
+```bash
+export DATABASE_URL=postgresql+asyncpg://kanban:kanban@localhost:5432/kanban_test
+pytest -v
+```
+
 ### End-to-end (Playwright)
 
 `frontend/e2e/` drives the real app in a browser against a running stack. Sign-in normally goes through an external OIDC provider that automated tests can't complete, so the suite authenticates via the test-only `POST /api/dev/test-login` endpoint described in [🔐 Authentication](#-authentication) — it's gated by `ENABLE_TEST_LOGIN` and 404s unless that flag is set.
@@ -338,6 +360,10 @@ npm run build
 Tests target `http://localhost:8080` by default; override with the `E2E_BASE_URL` env var if you chose different ports.
 
 Current coverage (`card-drag.spec.js`): dragging a card into a column that's already at its WIP limit is rejected and the card stays put; dragging a card into its next column moves it forward once WIP allows; and dragging a specific Backlog card moves exactly that card rather than the oldest card of its type.
+
+### Continuous Integration
+
+[`.github/workflows/backend-tests.yml`](.github/workflows/backend-tests.yml) runs the pytest suite above against a Postgres 16 service container on every pull request into `main` that touches `backend/**`. Mark it as a required status check in the branch protection settings for `main` if PRs shouldn't merge on a red build.
 
 ---
 
@@ -410,7 +436,7 @@ The game ends after Day 35. Your final rank is based on total revenue earned:
 
 ## 🔌 API Endpoints
 
-All `/api/games*` routes require a signed-in session and only operate on games owned by the current user (others 404, not 403, to avoid leaking existence).
+All `/api/games*` routes require a signed-in session and only operate on games owned by the current user (others 404, not 403, to avoid leaking existence). `GET /api/leaderboard` is the one exception — it's public and requires no session.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -419,6 +445,7 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 | `GET` | `/api/auth/me` | Current authenticated user (401 if not signed in) |
 | `POST` | `/api/auth/logout` | Clear the session |
 | `POST` | `/api/dev/test-login` | **Test-only.** Disabled by default (404) unless `ENABLE_TEST_LOGIN=true`; bypasses OIDC for e2e tests — see [🧪 Testing](#-testing) |
+| `GET` | `/api/leaderboard` | **Public, no auth required.** Top 5 users by their best completed game's revenue |
 | `POST` | `/api/games` | Create a new game, owned by the current user |
 | `GET` | `/api/games` | List the current user's games |
 | `GET` | `/api/games/{id}` | Get game state |

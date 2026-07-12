@@ -22,6 +22,7 @@ class CardColumn(str, enum.Enum):
     development = "development"
     dev_done = "dev_done"
     test = "test"
+    test_done = "test_done"
     deployed = "deployed"
     hidden = "hidden"
     exp_backlog = "exp_backlog"
@@ -31,6 +32,7 @@ class CardColumn(str, enum.Enum):
     exp_development = "exp_development"
     exp_dev_done = "exp_dev_done"
     exp_test = "exp_test"
+    exp_test_done = "exp_test_done"
     exp_deployed = "exp_deployed"
     removed = "removed"
 

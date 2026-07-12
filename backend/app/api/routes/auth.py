@@ -7,8 +7,9 @@ from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.oauth import oauth
+from app.core.username import resolve_initial_username
 from app.models.user import User
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, UserUpdate
 
 router = APIRouter()
 
@@ -31,11 +32,13 @@ async def signin_callback(request: Request, db: AsyncSession = Depends(get_db)):
     sub = userinfo["sub"]
     result = await db.execute(select(User).where(User.sub == sub))
     user = result.scalar_one_or_none()
+    name = userinfo.get("name")
+    email = userinfo.get("email")
     if user:
-        user.email = userinfo.get("email")
-        user.name = userinfo.get("name")
+        user.email = email
+        user.name = name
     else:
-        user = User(sub=sub, email=userinfo.get("email"), name=userinfo.get("name"))
+        user = User(sub=sub, email=email, name=name, username=resolve_initial_username(name, email))
         db.add(user)
     await db.flush()
 
@@ -54,7 +57,7 @@ async def test_login(request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.sub == TEST_USER_SUB))
     user = result.scalar_one_or_none()
     if not user:
-        user = User(sub=TEST_USER_SUB, email="e2e@test.local", name="E2E Test User")
+        user = User(sub=TEST_USER_SUB, email="e2e@test.local", name="E2E Test User", username="E2E Test User")
         db.add(user)
         await db.flush()
 
@@ -66,6 +69,18 @@ async def test_login(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.get("/api/auth/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/api/auth/me", response_model=UserResponse)
+async def update_me(
+    payload: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.username = payload.username
+    await db.commit()
+    await db.refresh(current_user)
     return current_user
 
 
