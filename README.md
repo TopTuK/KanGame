@@ -31,19 +31,19 @@ The system follows a **classic three-tier layout** with a clear split between pr
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  🌐 Presentation (Vue 3 SPA)                                    │
-│  Views → Components → Pinia Store → API Client                  │
-│  vue-i18n (UI strings + client-side content translation)        │
+   🌐 Presentation (Vue 3 SPA)                                    
+   Views → Components → Pinia Store → API Client                  
+   vue-i18n (UI strings + client-side content translation)        
 └────────────────────────────┬────────────────────────────────────┘
                              │ REST / JSON
 ┌────────────────────────────▼────────────────────────────────────┐
-│  ⚙️ Application (FastAPI)                                       │
-│  Routes → Schemas → Game Engine → Models                          │
+   ⚙️ Application (FastAPI)                                       
+   Routes → Schemas → Game Engine → Models                        
 └────────────────────────────┬────────────────────────────────────┘
                              │ SQLAlchemy async
 ┌────────────────────────────▼────────────────────────────────────┐
-│  🗄️ Persistence (PostgreSQL)                                    │
-│  games · cards · events · metrics                               │
+   🗄️ Persistence (PostgreSQL)                                    
+   games · cards · events · metrics                               
 └─────────────────────────────────────────────────────────────────┘
 ```
 
