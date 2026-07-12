@@ -1,6 +1,6 @@
 # 🎮 KanGame
 
-[![Backend tests](https://github.com/TopTuK/KanGame/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/TopTuK/KanGame/actions/workflows/backend-tests.yml)
+[![Tests](https://github.com/TopTuK/KanGame/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/TopTuK/KanGame/actions/workflows/backend-tests.yml)
 
 An interactive web simulation of Kanban methodology, inspired by [getKanban®](https://www.agile42.com/en/get-kanban/) — the Lean/Agile board game. Manage flow, limit WIP, assign team resources, handle different classes of service, and deliver value from Day 9 through Day 35 to maximize revenue.
 
@@ -155,7 +155,7 @@ User clicks Start Work
 | 🔐 Auth | Authlib (OIDC client), Starlette `SessionMiddleware` (signed session cookies) |
 | 🗄️ Database | PostgreSQL 16 |
 | 🐳 Infra | Docker Compose, Nginx |
-| 🧪 Testing | pytest (backend business logic), Playwright (e2e), GitHub Actions (CI) |
+| 🧪 Testing | pytest (backend business logic), Vitest (frontend business logic), Playwright (e2e), GitHub Actions (CI) |
 
 ---
 
@@ -163,7 +163,7 @@ User clicks Start Work
 
 ```
 KanGame2/
-├── .github/workflows/    # CI (backend-tests.yml: pytest on PRs into main)
+├── .github/workflows/    # CI (backend-tests.yml: pytest + Vitest on PRs into main)
 ├── backend/              # FastAPI API and game engine
 │   ├── certs/            # Local self-signed TLS cert (gitignored, generated — see Quick Start)
 │   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
@@ -180,7 +180,7 @@ KanGame2/
 │       ├── components/   # Board, cards, panels, modals, language selector
 │       ├── composables/  # Shared logic (e.g. content translation)
 │       ├── i18n/         # Locale files (ru, en) and vue-i18n setup
-│       ├── stores/       # Pinia state (gameStore.js, authStore.js)
+│       ├── stores/       # Pinia state (gameStore.js, authStore.js) + __tests__/ (Vitest)
 │       ├── services/     # API client
 │       └── views/        # Home, game, and leaderboard pages
 ├── nginx/                # Reverse proxy config
@@ -330,6 +330,17 @@ export DATABASE_URL=postgresql+asyncpg://kanban:kanban@localhost:5432/kanban_tes
 pytest -v
 ```
 
+### Frontend business logic (Vitest)
+
+`frontend/src/stores/__tests__/gameStore.spec.js` unit-tests the Pinia game store — the client-side mirror of the backend's rules: WIP-limit gating for pulling/dropping cards, planning-phase guards, worker selection/assignment, and how each API call (assign worker, pull card, start work, end day) updates local state. The API layer is mocked, so no backend or browser is required.
+
+```bash
+cd frontend
+npm install
+npm run test:unit         # single run
+npm run test:unit:watch   # watch mode
+```
+
 ### End-to-end (Playwright)
 
 `frontend/e2e/` drives the real app in a browser against a running stack. Sign-in normally goes through an external OIDC provider that automated tests can't complete, so the suite authenticates via the test-only `POST /api/dev/test-login` endpoint described in [🔐 Authentication](#-authentication) — it's gated by `ENABLE_TEST_LOGIN` and 404s unless that flag is set.
@@ -365,7 +376,12 @@ Current coverage (`card-drag.spec.js`): dragging a card into a column that's alr
 
 ### Continuous Integration
 
-[`.github/workflows/backend-tests.yml`](.github/workflows/backend-tests.yml) runs the pytest suite above against a Postgres 16 service container on every pull request into `main` that touches `backend/**`. Mark it as a required status check in the branch protection settings for `main` if PRs shouldn't merge on a red build.
+[`.github/workflows/backend-tests.yml`](.github/workflows/backend-tests.yml) runs on every pull request into `main` (and on push to `main`) that touches `backend/**` or `frontend/**`, as two parallel jobs:
+
+- **backend-tests** — the pytest suite above, against a Postgres 16 service container
+- **frontend-tests** — the Vitest suite above, via `npm ci && npm run test:unit`
+
+Mark both as required status checks in the branch protection settings for `main` if PRs shouldn't merge on a red build.
 
 ---
 
