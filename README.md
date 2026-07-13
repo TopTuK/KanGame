@@ -20,7 +20,8 @@ An interactive web simulation of Kanban methodology, inspired by [getKanban®](h
 - 📊 **Metrics** — Track throughput, WIP, deployed work, daily revenue, and cumulative revenue
 - 🔐 **Authentication** — Sign in with your organization's OIDC account before starting or resuming a game
 - 💾 **Persistent, per-user games** — Save and resume your own games via PostgreSQL; each player only sees their own
-- 🏆 **Public leaderboard** — Top 5 users by best completed-game revenue, viewable at `/leaderboard` without signing in
+- 🎬 **Demo mode** — Try a shortened Day 9–15 simulation from the home page with no account needed; not saved, not resumable, and excluded from the leaderboard (see [🎬 Demo Mode](#-demo-mode))
+- 🏆 **Public leaderboard** — Top 5 users by best completed-game revenue, viewable at `/leaderboard` without signing in; demo games never count
 - 🌐 **Localization** — Russian and English UI; Russian is the default; switch language from the header selector (preference saved in the browser)
 
 ---
@@ -51,7 +52,7 @@ The system follows a **classic three-tier layout** with a clear split between pr
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Views** (`HomeView`, `GameView`, `LeaderboardView`) | Page-level layout and routing entry points — `LeaderboardView` is the only one reachable without signing in |
+| **Views** (`HomeView`, `GameView`, `DemoGameView`, `LeaderboardView`) | Page-level layout and routing entry points — `LeaderboardView` and `DemoGameView` are reachable without signing in |
 | **Components** | UI building blocks — board, columns, cards, modals, panels |
 | **Pinia store** (`gameStore`) | Client state, derived WIP counts, worker selection, API orchestration |
 | **i18n** (`i18n/`, `useGameContent`) | UI strings and translated card/event text keyed by `card_key` / `event_key` |
@@ -75,10 +76,11 @@ The UI never encodes game rules. It renders server state and sends player action
 | **API routes** (`api/routes/games.py`) | HTTP endpoints, validation, error handling — every route requires a signed-in user and is scoped to their own games |
 | **Auth routes** (`api/routes/auth.py`) | OIDC login redirect, provider callback, current-user lookup, logout |
 | **Leaderboard route** (`api/routes/leaderboard.py`) | Public, unauthenticated endpoint — no route dependency requires a session |
+| **Demo route** (`api/routes/demo.py`) | Public, unauthenticated endpoints for demo games — no `GET`, so a demo can never be re-fetched or resumed (see [🎬 Demo Mode](#-demo-mode)) |
 | **Schemas** (`schemas/game.py`, `schemas/user.py`, `schemas/leaderboard.py`) | Pydantic request/response DTOs |
-| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, work rolls, revenue, events; every game lookup is filtered by owner. Also computes the leaderboard (best completed-game revenue per user) |
+| **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, work rolls, revenue, events; every game lookup is filtered by owner. Also computes the leaderboard (best completed-game revenue per user, excluding demo games) and creates/purges demo games |
 | **Data definitions** (`data/cards.py`) | Static card deck and daily event catalog |
-| **Models** (`models/game.py`, `models/user.py`) | SQLAlchemy ORM entities |
+| **Models** (`models/game.py`, `models/user.py`) | SQLAlchemy ORM entities — `Game.is_demo` flags demo games |
 | **Core** (`core/`) | Config, async DB session factory, OIDC client (`oauth.py`), `get_current_user` dependency (`auth.py`) |
 
 ### 🔐 Authentication
@@ -103,14 +105,23 @@ The **game engine** is the single source of truth for mechanics:
 - Role- and stage-specific productivity ranges at work time, blockers, Carlos/lockdown event flags, buffs
 - Revenue, penalties, overdue removals, and metric snapshots at end of day
 
+### 🎬 Demo Mode
+
+Visitors who aren't signed in can click **Try a demo instead** on the home page to play a shortened Day 9–15 slice of the game with no account:
+
+- All demo games are owned by a single system `User` row (created automatically on backend startup) and flagged `is_demo=True`, with `total_days=15` instead of 35 — the same `game_engine` functions (`assign_worker`, `pull_card`, `start_work`, `end_day`) run unchanged, so demo games follow the identical rules and day events as a real game.
+- `api/routes/demo.py` exposes `POST /api/demo`, `/assign-worker`, `/pull-card`, `/start-work`, `/end-day` — none of them require a session. There is deliberately **no `GET /api/demo/{id}`**: every action already returns the fresh game state directly, so nothing needs to re-fetch one, which is what makes a demo impossible to resume — reloading the page or navigating away always lands back on the warning screen instead of restoring the game.
+- `get_top_leaderboard` filters out `is_demo` games, so demo scores never appear on `/leaderboard`.
+- A background task started at app startup purges demo games (and their cards/events/metrics) older than 24 hours once a day, so demo data never accumulates in the database.
+
 ### 🗄️ Data Layer
 
 PostgreSQL stores the full game snapshot:
 
 | Entity | Purpose |
 |--------|---------|
-| `User` | OIDC identity (`sub`, email, name) — owns games |
-| `Game` | Session metadata, day/phase, team config, WIP limits, revenue; belongs to a `User` |
+| `User` | OIDC identity (`sub`, email, name) — owns games; a single system row also owns all demo games |
+| `Game` | Session metadata, day/phase, team config, WIP limits, revenue; belongs to a `User`; `is_demo` flags demo games (excluded from the leaderboard, purged daily) |
 | `Card` | Work items with story points, column, type, due dates |
 | `GameEvent` | Daily event cards and resolution state |
 | `GameMetric` | Time-series snapshots for charts |
@@ -168,7 +179,7 @@ KanGame2/
 │   ├── certs/            # Local self-signed TLS cert (gitignored, generated — see Quick Start)
 │   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
 │   └── app/
-│       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py)
+│       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py, demo.py)
 │       ├── core/         # Config, database, OIDC client (oauth.py), get_current_user (auth.py)
 │       ├── data/         # Card and event definitions
 │       ├── models/       # SQLAlchemy models (game.py, user.py)
@@ -182,7 +193,7 @@ KanGame2/
 │       ├── i18n/         # Locale files (ru, en) and vue-i18n setup
 │       ├── stores/       # Pinia state (gameStore.js, authStore.js) + __tests__/ (Vitest)
 │       ├── services/     # API client
-│       └── views/        # Home, game, and leaderboard pages
+│       └── views/        # Home, game, demo game, and leaderboard pages
 ├── nginx/                # Reverse proxy config
 ├── LICENSE               # MIT license
 ├── docker-compose.yml
@@ -315,7 +326,7 @@ npm run build
 
 ### Backend business logic (pytest)
 
-`backend/tests/` exercises the game engine directly (no browser, no running server): WIP limits, worker/card eligibility rules, deploy bonuses & penalties, day-event effects, blockers, overdue handling, and the full create → assign → pull → work → end-day lifecycle against a real Postgres instance.
+`backend/tests/` exercises the game engine directly (no browser, no running server): WIP limits, worker/card eligibility rules, deploy bonuses & penalties, day-event effects, blockers, overdue handling, the full create → assign → pull → work → end-day lifecycle against a real Postgres instance, and demo-mode specifics (Day 9–15 scope, leaderboard exclusion, ownership isolation from real users' games, and the age-cutoff cleanup query).
 
 ```bash
 cd backend
@@ -332,7 +343,7 @@ pytest -v
 
 ### Frontend business logic (Vitest)
 
-`frontend/src/stores/__tests__/gameStore.spec.js` unit-tests the Pinia game store — the client-side mirror of the backend's rules: WIP-limit gating for pulling/dropping cards, planning-phase guards, worker selection/assignment, and how each API call (assign worker, pull card, start work, end day) updates local state. The API layer is mocked, so no backend or browser is required.
+`frontend/src/stores/__tests__/gameStore.spec.js` unit-tests the Pinia game store — the client-side mirror of the backend's rules: WIP-limit gating for pulling/dropping cards, planning-phase guards, worker selection/assignment, how each API call (assign worker, pull card, start work, end day) updates local state, and — for demo games — that those same actions route through the unauthenticated `demoApi` instead of `gamesApi`. The API layer is mocked, so no backend or browser is required.
 
 ```bash
 cd frontend
@@ -387,7 +398,7 @@ Mark both as required status checks in the branch protection settings for `main`
 
 ## 🕹️ How to Play
 
-0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the new-game form only appears once you're signed in
+0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the new-game form only appears once you're signed in. Not ready to sign in? Click **Try a demo instead** on the home page for a no-account, Day 9–15 preview — it isn't saved and can't be resumed (see [🎬 Demo Mode](#-demo-mode))
 1. 🆕 **Start a game** — Enter your name and a game name on the home screen
 2. ↔️ **Pull cards** — Drag a card into the next column (Ready→Analysis, Analysis Done→Development, Dev Done→Test), or click **↑ Pull to Ready** on a Backlog card, respecting WIP limits
 3. 👥 **Assign resources** — Drag a worker onto an Analysis/Development/Test card, or click one or more workers then click a card; assign each worker to a different task or stack several workers on one task; click an assigned badge to unassign
@@ -454,7 +465,7 @@ The game ends after Day 35. Your final rank is based on total revenue earned:
 
 ## 🔌 API Endpoints
 
-All `/api/games*` routes require a signed-in session and only operate on games owned by the current user (others 404, not 403, to avoid leaking existence). `GET /api/leaderboard` is the one exception — it's public and requires no session.
+All `/api/games*` routes require a signed-in session and only operate on games owned by the current user (others 404, not 403, to avoid leaking existence). `GET /api/leaderboard` and all `/api/demo*` routes are the exceptions — they're public and require no session.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -471,6 +482,13 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 | `POST` | `/api/games/{id}/pull-card` | Pull one card forward by exactly one column (Backlog→Ready, Ready→Analysis, Analysis Done→Development, Dev Done→Test), subject to the destination's WIP limit |
 | `POST` | `/api/games/{id}/start-work` | Resolve assigned worker output for the day and return the work log |
 | `POST` | `/api/games/{id}/end-day` | Apply day-end events, metrics, overdue checks, and advance the day |
+| `POST` | `/api/demo` | **Public, no auth required.** Create a new demo game (Day 9–15, excluded from the leaderboard) |
+| `POST` | `/api/demo/{id}/assign-worker` | Same as the authenticated route, scoped to the demo game |
+| `POST` | `/api/demo/{id}/pull-card` | Same as the authenticated route, scoped to the demo game |
+| `POST` | `/api/demo/{id}/start-work` | Same as the authenticated route, scoped to the demo game |
+| `POST` | `/api/demo/{id}/end-day` | Same as the authenticated route, scoped to the demo game; reaches `completed` status at Day 15 |
+
+Note there's no `GET /api/demo/{id}` — see [🎬 Demo Mode](#-demo-mode) for why.
 
 ---
 

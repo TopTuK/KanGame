@@ -48,8 +48,8 @@
               ></div>
             </div>
             <div class="flex justify-between text-xs text-slate-600 mt-1">
-              <span>{{ t('score.day9') }}</span>
-              <span>{{ t('score.day35') }}</span>
+              <span>{{ t('score.dayLabel', { day: firstDay }) }}</span>
+              <span>{{ t('score.dayLabel', { day: lastDay }) }}</span>
             </div>
           </div>
 
@@ -58,7 +58,7 @@
               {{ t('score.backHome') }}
             </button>
             <button @click="newGame" class="btn-primary">
-              {{ t('score.newGame') }}
+              {{ store.game?.is_demo ? t('demo.playAgain') : t('score.newGame') }}
             </button>
           </div>
         </div>
@@ -80,6 +80,8 @@ const router = useRouter()
 
 const metrics = computed(() => store.game?.metrics || [])
 const cards = computed(() => store.game?.cards || [])
+const firstDay = computed(() => metrics.value[0]?.day ?? 9)
+const lastDay = computed(() => metrics.value[metrics.value.length - 1]?.day ?? store.game?.total_days ?? 35)
 
 const deployedCount = computed(() =>
   cards.value.filter(c => ['deployed', 'exp_deployed'].includes(c.column)).length
@@ -121,6 +123,10 @@ function fmtRub(n) {
 async function newGame() {
   const game = store.game
   if (!game) return
+  if (game.is_demo) {
+    await store.startDemo()
+    return
+  }
   const res = await gamesApi.create({ name: game.name + ' (2)', player_name: game.player_name })
   router.push(`/game/${res.data.id}`)
 }

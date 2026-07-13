@@ -27,6 +27,7 @@
     "signIn": "Sign in",
     "signInPrompt": "Sign in to play",
     "signInPromptDesc": "You need to sign in before you can start or resume a game.",
+    "tryDemo": "Try a demo instead",
     "signedInAs": "Signed in as {username}",
     "editUsername": "Edit username",
     "usernameSave": "Save",
@@ -196,8 +197,7 @@
     "cardsInProgress": "Cards Still In Progress",
     "avgThroughput": "Avg Throughput/Day",
     "dailyRevenue": "Daily Revenue Over Time",
-    "day9": "Day 9",
-    "day35": "Day 35",
+    "dayLabel": "Day {day}",
     "dayTooltip": "Day {day}: ${amount}",
     "backHome": "← Back to Home",
     "newGame": "New Game 🚀",
@@ -218,6 +218,16 @@
     "event": "event",
     "capacity": "capacity",
     "move": "move"
+  },
+  "demo": {
+    "badge": "DEMO",
+    "title": "Try a Demo Game",
+    "intro": "Play a short slice of KanGame with no account needed.",
+    "scopeWarning": "The demo only covers days 9–15 (the normal game runs through day 35).",
+    "saveWarning": "Your progress is not saved.",
+    "resumeWarning": "You won't be able to resume this demo later — closing or reloading the page starts over.",
+    "startButton": "Start Demo",
+    "playAgain": "Play Demo Again"
   },
   "help": {
     "title": "Welcome to KanGame",

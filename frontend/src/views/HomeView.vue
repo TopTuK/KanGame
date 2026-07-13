@@ -121,6 +121,9 @@
         <button @click="signIn" class="w-full btn-primary text-lg py-3 rounded-xl">
           {{ t('home.signIn') }}
         </button>
+        <router-link to="/demo" class="block w-full mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors">
+          {{ t('home.tryDemo') }}
+        </router-link>
       </div>
 
       <!-- Existing games -->

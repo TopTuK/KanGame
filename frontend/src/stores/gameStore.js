@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { gamesApi } from '../services/api.js'
+import { gamesApi, demoApi } from '../services/api.js'
 
 const STANDARD_COLUMNS = [
   'backlog', 'ready', 'analysis', 'analysis_done',
@@ -153,6 +153,31 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  async function startDemo() {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await demoApi.create()
+      game.value = res.data
+      clearSelectedWorkers()
+    } catch (e) {
+      error.value = e.response?.data?.detail || e.message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function resetGame() {
+    game.value = null
+    error.value = null
+    workLog.value = []
+    showWorkLog.value = false
+    endDayModal.value = null
+    clearSelectedWorkers()
+    draggingWorkerId.value = null
+    draggingCard.value = null
+  }
+
   function selectWorker(workerId) {
     if (!canPlan() || loading.value) return
     const w = workers.value.find(x => x.id === workerId)
@@ -185,7 +210,8 @@ export const useGameStore = defineStore('game', () => {
     error.value = null
     if (clearSelection) clearSelectedWorkers()
     try {
-      const res = await gamesApi.assignWorker(game.value.id, workerId, cardId)
+      const api = game.value.is_demo ? demoApi : gamesApi
+      const res = await api.assignWorker(game.value.id, workerId, cardId)
       game.value = res.data
       draggingWorkerId.value = null
     } catch (e) {
@@ -208,10 +234,11 @@ export const useGameStore = defineStore('game', () => {
     loading.value = true
     error.value = null
     try {
+      const api = game.value.is_demo ? demoApi : gamesApi
       for (const workerId of workerIds) {
         const worker = workers.value.find(w => w.id === workerId)
         if (worker?.assigned_card_id === cardId) continue
-        const res = await gamesApi.assignWorker(game.value.id, workerId, cardId)
+        const res = await api.assignWorker(game.value.id, workerId, cardId)
         game.value = res.data
       }
       clearSelectedWorkers()
@@ -228,7 +255,8 @@ export const useGameStore = defineStore('game', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await gamesApi.pullCard(game.value.id, cardId)
+      const api = game.value.is_demo ? demoApi : gamesApi
+      const res = await api.pullCard(game.value.id, cardId)
       game.value = res.data
     } catch (e) {
       error.value = e.response?.data?.detail || e.message
@@ -242,7 +270,8 @@ export const useGameStore = defineStore('game', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await gamesApi.startWork(game.value.id)
+      const api = game.value.is_demo ? demoApi : gamesApi
+      const res = await api.startWork(game.value.id)
       game.value = res.data.game
       workLog.value = res.data.log || []
       showWorkLog.value = true
@@ -259,7 +288,8 @@ export const useGameStore = defineStore('game', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await gamesApi.endDay(game.value.id)
+      const api = game.value.is_demo ? demoApi : gamesApi
+      const res = await api.endDay(game.value.id)
       game.value = res.data.game
       endDayModal.value = res.data.modal
       showWorkLog.value = false
@@ -284,7 +314,7 @@ export const useGameStore = defineStore('game', () => {
     selectedWorkerIds, draggingWorkerId, draggingCard, workLog, showWorkLog, endDayModal,
     cardsByColumn, isGameOver, workers, assignedWorkersByCard, wipCounts,
     isPullableColumn, isActiveWorkColumn, isDraggableCardColumn, canDropOnColumn, canPlan, canPullCard,
-    loadGame, selectWorker, clearSelectedWorkers, startDragWorker, stopDragWorker,
+    loadGame, startDemo, resetGame, selectWorker, clearSelectedWorkers, startDragWorker, stopDragWorker,
     startDragCard, stopDragCard,
     assignWorker, unassignWorker, assignToCard,
     pullCard,

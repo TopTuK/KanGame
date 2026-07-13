@@ -25,6 +25,7 @@ from sqlalchemy import delete
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.models.game import Card, Game, GameEvent, GameMetric
 from app.models.user import User
+from app.services import game_engine
 
 
 @pytest_asyncio.fixture
@@ -59,6 +60,16 @@ async def user(db_session):
         name="Tester",
         username="tester",
     )
+    db_session.add(u)
+    await db_session.commit()
+    await db_session.refresh(u)
+    return u
+
+
+@pytest_asyncio.fixture
+async def demo_user(db_session):
+    """Mirrors the demo system user main.py bootstraps at real app startup."""
+    u = User(id=uuid.uuid4(), sub=game_engine.DEMO_USER_SUB, name="Demo", username="Demo")
     db_session.add(u)
     await db_session.commit()
     await db_session.refresh(u)
