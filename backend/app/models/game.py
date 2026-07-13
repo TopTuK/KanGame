@@ -115,6 +115,7 @@ class Card(Base):
     deployed_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     entered_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     age: Mapped[int] = mapped_column(Integer, default=0)
+    stage_days: Mapped[dict] = mapped_column(JSON, default=dict)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     color: Mapped[str] = mapped_column(String(20), default="blue")
 

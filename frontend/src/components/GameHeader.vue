@@ -68,6 +68,10 @@
           📊 {{ t('metrics.title') }}
         </button>
 
+        <button @click="$emit('open-analytics')" class="btn-secondary text-sm py-2 px-4">
+          📈 {{ t('analytics.title') }}
+        </button>
+
         <button
           v-if="store.game.work_done && store.game.phase !== 'completed'"
           @click="store.endDay()"
@@ -90,7 +94,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useGameStore } from '../stores/gameStore.js'
 
-defineEmits(['open-metrics'])
+defineEmits(['open-metrics', 'open-analytics'])
 const { t } = useI18n()
 const store = useGameStore()
 

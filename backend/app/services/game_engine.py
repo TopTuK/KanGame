@@ -64,6 +64,39 @@ WORK_LANE_ORDER = [
     "analysis", "analysis_done", "development", "dev_done", "test",
 ]
 
+# Ordered pipeline stage groups for the Cumulative Flow Diagram — exp_* columns
+# collapse into the same group as their standard counterpart.
+STAGE_GROUP_ORDER = ["backlog", "ready", "analysis", "development", "test", "deployed"]
+
+_STAGE_GROUPS = {
+    "backlog": ("backlog", "exp_backlog"),
+    "ready": ("ready", "exp_ready"),
+    "analysis": ("analysis", "analysis_done", "exp_analysis", "exp_analysis_done"),
+    "development": ("development", "dev_done", "exp_development", "exp_dev_done"),
+    "test": ("test", "test_done", "exp_test", "exp_test_done"),
+    "deployed": ("deployed", "exp_deployed"),
+}
+_COLUMN_TO_GROUP = {col: g for g, cols in _STAGE_GROUPS.items() for col in cols}
+
+
+def _mark_stage_entry(card: Card, day: int) -> None:
+    """Record the first day `card` reached each pipeline stage group up to
+    its current column (backfilling any skipped stages), for CFD / cycle-time
+    computation. No-op for hidden/removed cards, which map to no group."""
+    group = _COLUMN_TO_GROUP.get(card.column)
+    if not group:
+        return
+    idx = STAGE_GROUP_ORDER.index(group)
+    stages = dict(card.stage_days or {})
+    changed = False
+    for g in STAGE_GROUP_ORDER[: idx + 1]:
+        if g not in stages:
+            stages[g] = day
+            changed = True
+    if changed:
+        card.stage_days = stages
+        flag_modified(card, "stage_days")
+
 
 def _card_map(game: Game) -> dict[str, Card]:
     return {str(c.id): c for c in game.cards}
@@ -203,6 +236,9 @@ async def create_game(
             card.dev_remaining = d_rem
             card.test_remaining = t_rem
             placed_keys.add(key)
+
+    for card in card_by_key.values():
+        _mark_stage_entry(card, 1)
 
     for event_def in EVENT_DEFINITIONS:
         db.add(GameEvent(
@@ -344,6 +380,7 @@ async def pull_card(
     elif to_col_str in ("deployed", "exp_deployed"):
         card.deployed_day = game.current_day
         _apply_deploy_bonuses(game, card, [])
+    _mark_stage_entry(card, game.current_day)
 
     await db.commit()
     return await get_game(db, game_id, user_id), None
@@ -372,6 +409,7 @@ def _advance_story(game: Game, card: Card, log: list[dict]) -> None:
         log.append({"type": "advance", "card_key": card.card_key, "to": next_col_str})
 
     card.column = next_col_str
+    _mark_stage_entry(card, game.current_day)
 
 
 def _apply_deploy_bonuses(game: Game, card: Card, log: list[dict]) -> None:
@@ -580,6 +618,7 @@ def _reveal_expedite(game: Game, day: int) -> None:
             and card.column == "hidden"
         ):
             card.column = "exp_backlog"
+            _mark_stage_entry(card, day)
 
 
 async def end_day(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> tuple[Optional[Game], dict, str | None]:

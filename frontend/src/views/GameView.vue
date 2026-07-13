@@ -1,6 +1,6 @@
 <template>
   <div class="h-screen flex flex-col overflow-hidden bg-board-bg">
-    <GameHeader @open-metrics="showMetrics = true" />
+    <GameHeader @open-metrics="showMetrics = true" @open-analytics="showAnalytics = true" />
 
     <div v-if="store.loading && !store.game" class="flex-1 flex items-center justify-center">
       <div class="text-center">
@@ -12,9 +12,10 @@
     <template v-else-if="store.game">
       <HelpModal v-if="showHelp" @close="showHelp = false" />
       <MetricsModal v-if="showMetrics" @close="showMetrics = false" />
+      <AnalyticsModal v-if="showAnalytics" @close="showAnalytics = false" />
       <WorkLogModal v-if="store.showWorkLog" :log="store.workLog" @close="store.dismissWorkLog()" />
       <EndDayModal v-if="store.endDayModal" :modal="store.endDayModal" @close="store.dismissEndDayModal()" />
-      <ScoreModal v-if="store.isGameOver" />
+      <ScoreModal v-if="store.isGameOver" @view-analytics="showAnalytics = true" />
 
       <div class="border-b border-slate-700/50 bg-slate-900/80 flex-shrink-0">
         <ResourcePanel />
@@ -41,6 +42,7 @@ import GameHeader from '../components/GameHeader.vue'
 import KanbanBoard from '../components/KanbanBoard.vue'
 import ResourcePanel from '../components/ResourcePanel.vue'
 import MetricsModal from '../components/MetricsModal.vue'
+import AnalyticsModal from '../components/AnalyticsModal.vue'
 import ScoreModal from '../components/ScoreModal.vue'
 import HelpModal from '../components/HelpModal.vue'
 import WorkLogModal from '../components/WorkLogModal.vue'
@@ -51,6 +53,7 @@ const route = useRoute()
 const store = useGameStore()
 const showHelp = ref(false)
 const showMetrics = ref(false)
+const showAnalytics = ref(false)
 
 // Native HTML5 drag-and-drop suppresses normal wheel scrolling for its
 // duration, and this layout has no page-level scroll fallback (h-screen

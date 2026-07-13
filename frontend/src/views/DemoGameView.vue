@@ -33,11 +33,12 @@
     </template>
 
     <template v-else>
-      <GameHeader @open-metrics="showMetrics = true" />
+      <GameHeader @open-metrics="showMetrics = true" @open-analytics="showAnalytics = true" />
       <MetricsModal v-if="showMetrics" @close="showMetrics = false" />
+      <AnalyticsModal v-if="showAnalytics" @close="showAnalytics = false" />
       <WorkLogModal v-if="store.showWorkLog" :log="store.workLog" @close="store.dismissWorkLog()" />
       <EndDayModal v-if="store.endDayModal" :modal="store.endDayModal" @close="store.dismissEndDayModal()" />
-      <ScoreModal v-if="store.isGameOver" />
+      <ScoreModal v-if="store.isGameOver" @view-analytics="showAnalytics = true" />
 
       <div class="border-b border-slate-700/50 bg-slate-900/80 flex-shrink-0">
         <ResourcePanel />
@@ -63,6 +64,7 @@ import GameHeader from '../components/GameHeader.vue'
 import KanbanBoard from '../components/KanbanBoard.vue'
 import ResourcePanel from '../components/ResourcePanel.vue'
 import MetricsModal from '../components/MetricsModal.vue'
+import AnalyticsModal from '../components/AnalyticsModal.vue'
 import ScoreModal from '../components/ScoreModal.vue'
 import WorkLogModal from '../components/WorkLogModal.vue'
 import EndDayModal from '../components/EndDayModal.vue'
@@ -70,6 +72,7 @@ import EndDayModal from '../components/EndDayModal.vue'
 const { t } = useI18n()
 const store = useGameStore()
 const showMetrics = ref(false)
+const showAnalytics = ref(false)
 
 // Mirrors GameView.vue's drag-scroll behavior (see there for rationale).
 const boardScrollEl = ref(null)
