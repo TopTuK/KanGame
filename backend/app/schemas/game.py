@@ -34,6 +34,7 @@ class CardResponse(BaseModel):
     deployed_day: Optional[int]
     entered_day: Optional[int]
     age: int
+    stage_days: dict
     color: str
     sort_order: int
 

@@ -18,6 +18,7 @@ An interactive web simulation of Kanban methodology, inspired by [getKanban®](h
 - ⚡ **Classes of service** — Standard, expedite, fixed-date, and intangible cards with distinct economic effects
 - 📅 **Daily gameplay loop** — Pull cards, assign resources, start work, review the work log, and end the day
 - 📊 **Metrics** — Track throughput, WIP, deployed work, daily revenue, and cumulative revenue
+- 📈 **Analytics diagrams** — Cumulative Flow Diagram, Lead Time distribution, Cycle Time distribution, and a Kanban flow-metrics summary (avg lead/cycle time, avg throughput, avg WIP, Little's Law check, on-time delivery rate), viewable mid-game or after the game ends
 - 🔐 **Authentication** — Sign in with your organization's OIDC account before starting or resuming a game
 - 💾 **Persistent, per-user games** — Save and resume your own games via PostgreSQL; each player only sees their own
 - 🎬 **Demo mode** — Try a shortened Day 9–15 simulation from the home page with no account needed; not saved, not resumable, and excluded from the leaderboard (see [🎬 Demo Mode](#-demo-mode))
@@ -66,6 +67,7 @@ The UI never encodes game rules. It renders server state and sends player action
 - `KanbanBoard` / `KanbanColumn` / `KanbanCard` — board layout, drag-and-drop card movement, a "Pull to Ready" button on Backlog cards, worker drop targets
 - `ResourcePanel` — draggable worker pool, multi-select click assignment, Start Work
 - `MetricsPanel` — throughput, WIP, deployed work, and revenue history
+- `AnalyticsModal` (with `CumulativeFlowChart` and `DistributionHistogram`, built on Chart.js/vue-chartjs) — Cumulative Flow Diagram, Lead/Cycle Time distributions, and Kanban flow metrics; opened from the header's 📈 Analytics button or from the end-game screen
 - `HelpModal` / `WorkLogModal` / `EndDayModal` / `ScoreModal` — onboarding, daily work log, day events, and end-game summary
 - `LanguageSelector` — in-app locale switcher (top-right)
 
@@ -122,7 +124,7 @@ PostgreSQL stores the full game snapshot:
 |--------|---------|
 | `User` | OIDC identity (`sub`, email, name) — owns games; a single system row also owns all demo games |
 | `Game` | Session metadata, day/phase, team config, WIP limits, revenue; belongs to a `User`; `is_demo` flags demo games (excluded from the leaderboard, purged daily) |
-| `Card` | Work items with story points, column, type, due dates |
+| `Card` | Work items with story points, column, type, due dates; `stage_days` records the first day each card reached every pipeline stage, feeding the analytics diagrams |
 | `GameEvent` | Daily event cards and resolution state |
 | `GameMetric` | Time-series snapshots for charts |
 
@@ -161,7 +163,7 @@ User clicks Start Work
 
 | Layer | Technologies |
 |-------|--------------|
-| 🎨 Frontend | Vue 3, Vite, Pinia, Vue Router, vue-i18n, Tailwind CSS |
+| 🎨 Frontend | Vue 3, Vite, Pinia, Vue Router, vue-i18n, Tailwind CSS, Chart.js / vue-chartjs |
 | 🐍 Backend | Python 3.12, FastAPI, SQLAlchemy (async), Pydantic |
 | 🔐 Auth | Authlib (OIDC client), Starlette `SessionMiddleware` (signed session cookies) |
 | 🗄️ Database | PostgreSQL 16 |
@@ -405,6 +407,7 @@ Mark both as required status checks in the branch protection settings for `main`
 4. ▶️ **Start Work** — Resolve each assigned worker's output for the day, reduce remaining analysis/development/test work, and automatically advance completed stages
 5. 🌙 **End the day** — Apply daily events, remove overdue fixed-date/expedite work, record metrics, and advance the calendar
 6. 🏆 **Win condition** — Maximize total revenue from Day 9 through Day 35 while meeting fixed-date commitments and handling expedites
+7. 📈 **Check your flow** — Click the 📈 Analytics button in the header at any point during the game, or on the end-game summary screen, to see the Cumulative Flow Diagram, Lead/Cycle Time distributions, and Kanban flow metrics
 
 ### 🃏 Card Types
 

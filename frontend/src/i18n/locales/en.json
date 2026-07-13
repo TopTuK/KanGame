@@ -257,6 +257,42 @@
     "testingIncomplete": "Testing not complete ({points} points remaining)",
     "wipLimit": "WIP limit reached for {column} ({limit} max)"
   },
+  "analytics": {
+    "title": "Analytics",
+    "empty": "Not enough data yet — deploy some cards first",
+    "summary": {
+      "title": "Kanban Metrics"
+    },
+    "cfd": {
+      "title": "Cumulative Flow Diagram"
+    },
+    "leadTime": {
+      "title": "Lead Time Distribution"
+    },
+    "cycleTime": {
+      "title": "Cycle Time Distribution"
+    },
+    "stages": {
+      "backlog": "Backlog",
+      "ready": "Ready",
+      "analysis": "Analysis",
+      "development": "Development",
+      "test": "Test",
+      "deployed": "Deployed"
+    },
+    "axis": {
+      "day": "Day",
+      "cards": "Cards"
+    },
+    "metrics": {
+      "avgLeadTime": "Avg Lead Time (d)",
+      "avgCycleTime": "Avg Cycle Time (d)",
+      "avgThroughput": "Avg Throughput/Day",
+      "avgWip": "Avg WIP",
+      "littlesLaw": "WIP ≈ Throughput × Lead Time",
+      "onTimeRate": "On-Time Delivery"
+    }
+  },
   "cards": {},
   "events": {}
 }

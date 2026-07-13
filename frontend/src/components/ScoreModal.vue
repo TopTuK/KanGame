@@ -57,6 +57,9 @@
             <button @click="$router.push('/')" class="btn-secondary">
               {{ t('score.backHome') }}
             </button>
+            <button @click="$emit('view-analytics')" class="btn-secondary">
+              📈 {{ t('analytics.title') }}
+            </button>
             <button @click="newGame" class="btn-primary">
               {{ store.game?.is_demo ? t('demo.playAgain') : t('score.newGame') }}
             </button>
@@ -74,6 +77,7 @@ import { useI18n } from 'vue-i18n'
 import { useGameStore } from '../stores/gameStore.js'
 import { gamesApi } from '../services/api.js'
 
+defineEmits(['view-analytics'])
 const { t } = useI18n()
 const store = useGameStore()
 const router = useRouter()
