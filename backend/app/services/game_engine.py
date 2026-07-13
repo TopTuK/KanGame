@@ -3,14 +3,22 @@ Core game engine — ported from shtaked32-code/kanbangame js/mechanics.js
 """
 import random
 import uuid
+from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.game import Game, Card, GameEvent, GameMetric, GameStatus, CardColumn
 from app.models.user import User
+
+# All demo games are owned by this single system user (see main.py startup,
+# which guarantees the row exists before the app accepts requests). Demo
+# games are unauthenticated, so there's no real per-visitor account to
+# attach them to — the game's own unguessable id is the only isolation
+# boundary, same trust model as a real game's id.
+DEMO_USER_SUB = "__demo_system_user__"
 from app.data.cards import (
     CARD_DEFINITIONS,
     EVENT_DEFINITIONS,
@@ -125,7 +133,10 @@ def can_pull_to(game: Game, wip_key: str) -> bool:
     return wip_count(game, wip_key) < limit
 
 
-async def create_game(db: AsyncSession, name: str, player_name: str, user_id: uuid.UUID) -> Game:
+async def create_game(
+    db: AsyncSession, name: str, player_name: str, user_id: uuid.UUID,
+    total_days: int = 35, is_demo: bool = False,
+) -> Game:
     game = Game(
         id=uuid.uuid4(),
         user_id=user_id,
@@ -133,7 +144,8 @@ async def create_game(db: AsyncSession, name: str, player_name: str, user_id: uu
         player_name=player_name,
         status=GameStatus.active,
         current_day=9,
-        total_days=35,
+        total_days=total_days,
+        is_demo=is_demo,
         phase="planning",
         work_done=False,
         carlos_policy=False,
@@ -209,6 +221,36 @@ async def create_game(db: AsyncSession, name: str, player_name: str, user_id: uu
     return await get_game(db, game.id, user_id)
 
 
+async def get_demo_user(db: AsyncSession) -> User:
+    result = await db.execute(select(User).where(User.sub == DEMO_USER_SUB))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise RuntimeError("Demo system user is missing — expected to be created at startup")
+    return user
+
+
+async def create_demo_game(db: AsyncSession) -> Game:
+    demo_user = await get_demo_user(db)
+    return await create_game(db, "Demo", "Guest", demo_user.id, total_days=15, is_demo=True)
+
+
+async def delete_demo_games(db: AsyncSession, older_than: timedelta = timedelta(hours=24)) -> int:
+    cutoff = datetime.utcnow() - older_than
+    ids_result = await db.execute(
+        select(Game.id).where(Game.is_demo == True, Game.created_at < cutoff)  # noqa: E712
+    )
+    demo_ids = [row[0] for row in ids_result.all()]
+    if not demo_ids:
+        return 0
+
+    await db.execute(delete(Card).where(Card.game_id.in_(demo_ids)))
+    await db.execute(delete(GameEvent).where(GameEvent.game_id.in_(demo_ids)))
+    await db.execute(delete(GameMetric).where(GameMetric.game_id.in_(demo_ids)))
+    await db.execute(delete(Game).where(Game.id.in_(demo_ids)))
+    await db.commit()
+    return len(demo_ids)
+
+
 async def get_game(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Game]:
     result = await db.execute(
         select(Game)
@@ -228,7 +270,7 @@ async def get_all_games(db: AsyncSession, user_id: uuid.UUID) -> list[Game]:
 async def get_top_leaderboard(db: AsyncSession, limit: int = 5) -> list[dict]:
     subq = (
         select(Game.user_id, func.max(Game.total_revenue).label("best_revenue"))
-        .where(Game.status == GameStatus.completed)
+        .where(Game.status == GameStatus.completed, Game.is_demo.is_(False))
         .group_by(Game.user_id)
         .subquery()
     )

@@ -17,6 +17,15 @@ export const gamesApi = {
   endDay: (id) => api.post(`/games/${id}/end-day`),
 }
 
+export const demoApi = {
+  create: () => api.post('/demo'),
+  assignWorker: (id, worker_id, card_id) =>
+    api.post(`/demo/${id}/assign-worker`, { worker_id, card_id }),
+  pullCard: (id, card_id) => api.post(`/demo/${id}/pull-card`, { card_id }),
+  startWork: (id) => api.post(`/demo/${id}/start-work`),
+  endDay: (id) => api.post(`/demo/${id}/end-day`),
+}
+
 export const authApi = {
   me: () => api.get('/auth/me'),
   logout: () => api.post('/auth/logout'),

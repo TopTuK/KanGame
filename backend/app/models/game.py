@@ -61,6 +61,7 @@ class Game(Base):
     work_done: Mapped[bool] = mapped_column(Boolean, default=False)
     carlos_policy: Mapped[bool] = mapped_column(Boolean, default=False)
     lockdown: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
     team_config: Mapped[dict] = mapped_column(JSON, default=lambda: {
         "workers": [],
         "buffs": {"analyst": 0, "developer": 0, "tester": 0},

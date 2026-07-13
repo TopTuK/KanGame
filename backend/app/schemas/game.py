@@ -81,6 +81,7 @@ class GameResponse(BaseModel):
     work_done: bool
     carlos_policy: bool
     lockdown: bool
+    is_demo: bool
     team_config: dict
     wip_limits: dict
     day_capacity_used: dict

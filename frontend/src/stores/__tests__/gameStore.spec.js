@@ -11,9 +11,16 @@ vi.mock('../../services/api.js', () => ({
     startWork: vi.fn(),
     endDay: vi.fn(),
   },
+  demoApi: {
+    create: vi.fn(),
+    assignWorker: vi.fn(),
+    pullCard: vi.fn(),
+    startWork: vi.fn(),
+    endDay: vi.fn(),
+  },
 }))
 
-import { gamesApi } from '../../services/api.js'
+import { gamesApi, demoApi } from '../../services/api.js'
 import { useGameStore } from '../gameStore.js'
 
 function makeWorker(overrides = {}) {
@@ -534,5 +541,113 @@ describe('loadGame', () => {
     await store.loadGame('game-1')
 
     expect(store.error).toBe('Network Error')
+  })
+})
+
+// --- demo mode -----------------------------------
+
+describe('startDemo', () => {
+  it('creates a demo game via demoApi and stores it directly, without a loadGame fetch', async () => {
+    const store = useGameStore()
+    const demoGame = makeGame({ is_demo: true, total_days: 15 })
+    demoApi.create.mockResolvedValue({ data: demoGame })
+
+    await store.startDemo()
+
+    expect(demoApi.create).toHaveBeenCalled()
+    expect(gamesApi.get).not.toHaveBeenCalled()
+    expect(store.game).toEqual(demoGame)
+    expect(store.loading).toBe(false)
+  })
+
+  it('surfaces a backend error on failure', async () => {
+    const store = useGameStore()
+    demoApi.create.mockRejectedValue({ response: { data: { detail: 'boom' } } })
+
+    await store.startDemo()
+
+    expect(store.error).toBe('boom')
+  })
+})
+
+describe('resetGame', () => {
+  it('clears game state and transient UI state', () => {
+    const store = useGameStore()
+    store.game = makeGame()
+    store.error = 'oops'
+    store.workLog = [{ type: 'work' }]
+    store.showWorkLog = true
+    store.endDayModal = { day: 9 }
+    store.selectedWorkerIds = ['a1']
+    store.draggingWorkerId = 'a1'
+    store.draggingCard = { id: 'c1', fromColumn: 'ready', toColumn: 'analysis' }
+
+    store.resetGame()
+
+    expect(store.game).toBeNull()
+    expect(store.error).toBeNull()
+    expect(store.workLog).toEqual([])
+    expect(store.showWorkLog).toBe(false)
+    expect(store.endDayModal).toBeNull()
+    expect(store.selectedWorkerIds).toEqual([])
+    expect(store.draggingWorkerId).toBeNull()
+    expect(store.draggingCard).toBeNull()
+  })
+})
+
+describe('is_demo branching for mutation actions', () => {
+  it('assignWorker calls demoApi instead of gamesApi for a demo game', async () => {
+    const store = useGameStore()
+    store.game = makeGame({ is_demo: true })
+    demoApi.assignWorker.mockResolvedValue({ data: makeGame({ is_demo: true }) })
+
+    await store.assignWorker('a1', 'card-1')
+
+    expect(demoApi.assignWorker).toHaveBeenCalledWith('game-1', 'a1', 'card-1')
+    expect(gamesApi.assignWorker).not.toHaveBeenCalled()
+  })
+
+  it('pullCard calls demoApi instead of gamesApi for a demo game', async () => {
+    const store = useGameStore()
+    store.game = makeGame({ is_demo: true })
+    demoApi.pullCard.mockResolvedValue({ data: makeGame({ is_demo: true }) })
+
+    await store.pullCard('card-1')
+
+    expect(demoApi.pullCard).toHaveBeenCalledWith('game-1', 'card-1')
+    expect(gamesApi.pullCard).not.toHaveBeenCalled()
+  })
+
+  it('startWork calls demoApi instead of gamesApi for a demo game', async () => {
+    const store = useGameStore()
+    store.game = makeGame({ is_demo: true })
+    demoApi.startWork.mockResolvedValue({ data: { game: makeGame({ is_demo: true }), log: [] } })
+
+    await store.startWork()
+
+    expect(demoApi.startWork).toHaveBeenCalledWith('game-1')
+    expect(gamesApi.startWork).not.toHaveBeenCalled()
+  })
+
+  it('endDay calls demoApi instead of gamesApi for a demo game', async () => {
+    const store = useGameStore()
+    store.game = makeGame({ is_demo: true })
+    demoApi.endDay.mockResolvedValue({ data: { game: makeGame({ is_demo: true }), modal: { day: 9 } } })
+
+    await store.endDay()
+
+    expect(demoApi.endDay).toHaveBeenCalledWith('game-1')
+    expect(gamesApi.endDay).not.toHaveBeenCalled()
+  })
+
+  it('a non-demo game still uses gamesApi', async () => {
+    const store = useGameStore()
+    store.game = makeGame({ is_demo: false })
+    gamesApi.pullCard.mockResolvedValue({ data: makeGame() })
+
+    await store.pullCard('card-1')
+
+    expect(gamesApi.pullCard).toHaveBeenCalledWith('game-1', 'card-1')
+    expect(demoApi.pullCard).not.toHaveBeenCalled()
   })
 })

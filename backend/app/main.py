@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -7,7 +9,10 @@ from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.username import resolve_initial_username
 from app.models.user import User
-from app.api.routes import games, auth, leaderboard
+from app.services import game_engine
+from app.api.routes import games, auth, leaderboard, demo
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="KanGame API", version="1.0.0", docs_url="/api/docs")
 
@@ -46,6 +51,7 @@ async def startup():
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS work_done BOOLEAN DEFAULT FALSE",
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS carlos_policy BOOLEAN DEFAULT FALSE",
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS lockdown BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)",
     ]
     async with engine.begin() as conn:
@@ -66,10 +72,31 @@ async def startup():
         if stale_users:
             await session.commit()
 
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(User).where(User.sub == game_engine.DEMO_USER_SUB)
+        )
+        if not result.scalar_one_or_none():
+            session.add(User(sub=game_engine.DEMO_USER_SUB, name="Demo", username="Demo"))
+            await session.commit()
+
+    asyncio.create_task(_demo_cleanup_loop())
+
+
+async def _demo_cleanup_loop():
+    while True:
+        try:
+            async with AsyncSessionLocal() as session:
+                await game_engine.delete_demo_games(session)
+        except Exception:
+            logger.exception("Demo game cleanup failed")
+        await asyncio.sleep(24 * 3600)
+
 
 app.include_router(games.router, prefix="/api/games", tags=["games"])
 app.include_router(auth.router, tags=["auth"])
 app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["leaderboard"])
+app.include_router(demo.router, prefix="/api/demo", tags=["demo"])
 
 
 @app.get("/health")

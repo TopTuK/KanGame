@@ -1,12 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import GameView from '../views/GameView.vue'
+import DemoGameView from '../views/DemoGameView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
 import { useAuthStore } from '../stores/authStore.js'
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
   { path: '/game/:id', name: 'game', component: GameView, meta: { requiresAuth: true } },
+  { path: '/demo', name: 'demo', component: DemoGameView },
   { path: '/leaderboard', name: 'leaderboard', component: LeaderboardView },
 ]
 

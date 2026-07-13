@@ -6,6 +6,11 @@
         <span class="text-white font-bold text-base leading-none">KanGame</span>
       </router-link>
 
+      <span
+        v-if="store.game?.is_demo"
+        class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-950/60 text-amber-400 border border-amber-800/50 flex-shrink-0"
+      >{{ t('demo.badge') }}</span>
+
       <div class="h-5 w-px bg-slate-700 flex-shrink-0"></div>
 
       <div v-if="store.game" class="flex items-center gap-3 flex-shrink-0">

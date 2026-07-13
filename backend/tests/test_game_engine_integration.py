@@ -5,6 +5,7 @@ lifecycle: create_game -> assign_worker -> start_work -> end_day, plus the
 leaderboard query.
 """
 import uuid
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -234,3 +235,80 @@ async def test_leaderboard_ranks_by_best_revenue_and_respects_limit(db_session, 
     board = await ge.get_top_leaderboard(db_session, limit=1)
     assert len(board) == 1
     assert board[0]["profit"] == 50000
+
+
+# --- demo games -----------------------------------------------------
+
+async def test_create_demo_game_spans_day_9_through_15(db_session, demo_user):
+    game = await ge.create_demo_game(db_session)
+
+    assert game.current_day == 9
+    assert game.total_days == 15
+    assert game.is_demo is True
+    assert game.user_id == demo_user.id
+
+
+async def test_create_demo_game_without_demo_user_raises(db_session):
+    with pytest.raises(RuntimeError):
+        await ge.create_demo_game(db_session)
+
+
+async def test_demo_game_reaches_completed_status_at_day_15(db_session, demo_user):
+    game = await ge.create_demo_game(db_session)
+    game.current_day = game.total_days
+    await db_session.commit()
+
+    demo_id = game.user_id
+    game, _, err = await ge.start_work(db_session, game.id, demo_id)
+    assert err is None
+    game, modal, err = await ge.end_day(db_session, game.id, demo_id)
+    assert err is None
+    assert game.status == GameStatus.completed
+    assert game.phase == "completed"
+
+
+async def test_leaderboard_excludes_demo_games(db_session, user, demo_user):
+    real_game = await ge.create_game(db_session, "A", "Alice", user.id)
+    real_game.status = GameStatus.completed
+    real_game.total_revenue = 20000
+
+    demo_game = await ge.create_demo_game(db_session)
+    demo_game.status = GameStatus.completed
+    demo_game.total_revenue = 999999
+    await db_session.commit()
+
+    board = await ge.get_top_leaderboard(db_session, limit=5)
+    assert [entry["profit"] for entry in board] == [20000]
+
+
+async def test_demo_game_isolated_from_real_users_games(db_session, user, demo_user):
+    real_game = await ge.create_game(db_session, "A", "Alice", user.id)
+    demo_game = await ge.create_demo_game(db_session)
+
+    # the real user's id can't fetch the demo game, and vice versa
+    assert await ge.get_game(db_session, demo_game.id, user.id) is None
+    assert await ge.get_game(db_session, real_game.id, demo_user.id) is None
+
+
+async def test_delete_demo_games_removes_children_and_respects_age_cutoff(db_session, demo_user):
+    old_game = await ge.create_demo_game(db_session)
+    old_game.created_at = datetime.utcnow() - timedelta(hours=25)
+    await db_session.commit()
+
+    fresh_game = await ge.create_demo_game(db_session)
+
+    deleted = await ge.delete_demo_games(db_session, older_than=timedelta(hours=24))
+    assert deleted == 1
+
+    assert await db_session.get(Game, old_game.id) is None
+    assert await db_session.get(Game, fresh_game.id) is not None
+
+
+async def test_delete_demo_games_ignores_real_games(db_session, user):
+    real_game = await ge.create_game(db_session, "A", "Alice", user.id)
+    real_game.created_at = datetime.utcnow() - timedelta(hours=48)
+    await db_session.commit()
+
+    deleted = await ge.delete_demo_games(db_session, older_than=timedelta(hours=24))
+    assert deleted == 0
+    assert await db_session.get(Game, real_game.id) is not None
