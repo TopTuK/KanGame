@@ -215,6 +215,40 @@ async def test_end_day_on_final_day_completes_the_game(db_session, user):
     assert game.phase == "completed"
 
 
+async def test_end_day_applies_test_blocker_event_when_a_card_is_in_test(db_session, user):
+    # Day 12's scripted event ("blocker_test") fires normally when the
+    # default board still has a card sitting in Test at that point.
+    game = await ge.create_game(db_session, "G", "Alice", user.id)
+    game.current_day = 12
+    await db_session.commit()
+
+    game, _, err = await ge.start_work(db_session, game.id, user.id)
+    assert err is None
+    game, modal, err = await ge.end_day(db_session, game.id, user.id)
+    assert err is None
+    assert modal["event_key"] == "blocker_test"
+    assert any(c.is_blocked for c in game.cards)
+
+
+async def test_end_day_skips_test_blocker_event_when_test_is_empty(db_session, user):
+    # If the player has cleared Test out entirely before day 12 completes,
+    # the "defect found in Test" story makes no sense and should fall back
+    # to the quiet-day content instead of blocking a nonexistent card.
+    game = await ge.create_game(db_session, "G", "Alice", user.id)
+    for card in game.cards:
+        if card.column in ("test", "exp_test"):
+            card.column = "test_done"
+    game.current_day = 12
+    await db_session.commit()
+
+    game, _, err = await ge.start_work(db_session, game.id, user.id)
+    assert err is None
+    game, modal, err = await ge.end_day(db_session, game.id, user.id)
+    assert err is None
+    assert modal["event_key"] == "quiet_day"
+    assert not any(c.is_blocked for c in game.cards)
+
+
 # --- leaderboard -----------------------------------------------------
 
 async def test_leaderboard_ranks_by_best_revenue_and_respects_limit(db_session, user):
