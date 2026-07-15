@@ -621,6 +621,13 @@ def _reveal_expedite(game: Game, day: int) -> None:
             _mark_stage_entry(card, day)
 
 
+def _needs_test_card(event_data: dict) -> bool:
+    return any(
+        eff.get("type") == "blocker" and eff.get("lane", "test") == "test"
+        for eff in event_data.get("effects", [])
+    )
+
+
 async def end_day(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> tuple[Optional[Game], dict, str | None]:
     game = await get_game(db, game_id, user_id)
     if not game:
@@ -630,6 +637,11 @@ async def end_day(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> t
 
     completed_day = game.current_day
     event_data = DAY_EVENTS.get(completed_day, {})
+    if _needs_test_card(event_data) and not any(c.column in ("test", "exp_test") for c in game.cards):
+        # The scripted testing-defect event only makes sense with a card
+        # actually sitting in Test — fall back to the existing quiet-day
+        # content (day 28) rather than showing a blocker story for nothing.
+        event_data = DAY_EVENTS[28]
     overdue = _find_overdue(game, completed_day)
     end_log: list[dict] = []
 

@@ -18,15 +18,19 @@ const props = defineProps({
 
 const chartData = computed(() => ({
   labels: props.days,
-  datasets: props.series.map((s, i) => ({
+  datasets: props.series.map((s, i, arr) => ({
     label: s.label,
     data: s.data,
     borderColor: s.color,
-    backgroundColor: s.color + '55',
-    fill: i === 0 ? 'origin' : '-1',
+    backgroundColor: s.color + 'e6',
+    // Each dataset fills toward the NEXT (smaller) one rather than the
+    // previous, so the band between two adjacent lines — cards that reached
+    // this stage but not the next — is painted with this stage's own color
+    // instead of the following stage's.
+    fill: i === arr.length - 1 ? 'origin' : i + 1,
     pointRadius: 0,
     borderWidth: 2,
-    tension: 0.15,
+    tension: 0,
   })),
 }))
 

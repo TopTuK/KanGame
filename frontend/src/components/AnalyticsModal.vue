@@ -1,5 +1,6 @@
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+  <Teleport to="body">
+  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
     <div class="bg-slate-900 border border-slate-600 rounded-2xl max-w-4xl w-full shadow-2xl max-h-[85vh] flex flex-col">
       <div class="px-6 py-4 border-b border-slate-700 flex-shrink-0">
         <h2 class="text-xl font-bold text-white">{{ t('analytics.title') }}</h2>
@@ -47,6 +48,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -61,12 +63,11 @@ const { t } = useI18n()
 const store = useGameStore()
 
 const STAGE_META = [
-  { key: 'backlog', color: '#0c4a6e' },
-  { key: 'ready', color: '#0369a1' },
-  { key: 'analysis', color: '#0284c7' },
-  { key: 'development', color: '#0ea5e9' },
-  { key: 'test', color: '#38bdf8' },
-  { key: 'deployed', color: '#7dd3fc' },
+  { key: 'ready', color: '#199e70' },
+  { key: 'analysis', color: '#c98500' },
+  { key: 'development', color: '#008300' },
+  { key: 'test', color: '#9085e9' },
+  { key: 'deployed', color: '#e66767' },
 ]
 
 const game = computed(() => store.game)
