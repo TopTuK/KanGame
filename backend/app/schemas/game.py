@@ -4,7 +4,7 @@ import uuid
 
 
 class GameCreate(BaseModel):
-    name: str
+    name: Optional[str] = None
     player_name: str
 
 

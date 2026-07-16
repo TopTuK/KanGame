@@ -17,6 +17,10 @@ def generate_random_username() -> str:
     return f"{random.choice(ADJECTIVES)}{random.choice(NOUNS)}{random.randint(100, 999)}"
 
 
+def generate_random_game_name() -> str:
+    return f"{random.choice(ADJECTIVES)} {random.choice(NOUNS)} {random.randint(100, 999)}"
+
+
 def resolve_initial_username(name: str | None, email: str | None) -> str:
     if name and name.strip():
         return name.strip()

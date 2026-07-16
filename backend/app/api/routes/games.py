@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.username import generate_random_game_name
 from app.models.user import User
 from app.schemas.game import (
     GameCreate, GameResponse, GameListItem,
@@ -21,7 +22,8 @@ async def create_game(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await game_engine.create_game(db, payload.name, payload.player_name, current_user.id)
+    name = (payload.name or "").strip() or generate_random_game_name()
+    return await game_engine.create_game(db, name, payload.player_name, current_user.id)
 
 
 @router.get("", response_model=list[GameListItem])

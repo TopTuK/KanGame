@@ -400,8 +400,8 @@ Mark both as required status checks in the branch protection settings for `main`
 
 ## 🕹️ How to Play
 
-0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the new-game form only appears once you're signed in. Not ready to sign in? Click **Try a demo instead** on the home page for a no-account, Day 9–15 preview — it isn't saved and can't be resumed (see [🎬 Demo Mode](#-demo-mode))
-1. 🆕 **Start a game** — Enter your name and a game name on the home screen
+0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the **New Game** button only appears once you're signed in. Not ready to sign in? Click **Try a demo instead** on the home page for a no-account, Day 9–15 preview — it isn't saved and can't be resumed (see [🎬 Demo Mode](#-demo-mode))
+1. 🆕 **Start a game** — Click **New Game** on the home screen; your player name and a random game name are assigned automatically
 2. ↔️ **Pull cards** — Drag a card into the next column (Ready→Analysis, Analysis Done→Development, Dev Done→Test), or click **↑ Pull to Ready** on a Backlog card, respecting WIP limits
 3. 👥 **Assign resources** — Drag a worker onto an Analysis/Development/Test card, or click one or more workers then click a card; assign each worker to a different task or stack several workers on one task; click an assigned badge to unassign
 4. ▶️ **Start Work** — Resolve each assigned worker's output for the day, reduce remaining analysis/development/test work, and automatically advance completed stages
