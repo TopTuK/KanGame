@@ -1,0 +1,46 @@
+services:
+  app:
+    image: kangame:latest
+    environment:
+      DATABASE_URL: postgresql+asyncpg://kanban:kanban@db:5432/kanban
+      AuthClientId: ${AuthClientId}
+      AuthClientSecret: ${AuthClientSecret}
+      AuthAuthority: ${AuthAuthority}
+      AuthCallbackUrl: ${AuthCallbackUrl}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      SESSION_COOKIE_SECURE: "true"
+      VIRTUAL_HOST: kangame.pmi.moscow
+      VIRTUAL_PORT: "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+      - pmi_network
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: kanban
+      POSTGRES_DB: kanban
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  pmi_network:
+    external: true

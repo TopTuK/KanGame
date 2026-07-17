@@ -176,7 +176,9 @@ User clicks Start Work
 
 ```
 KanGame2/
-├── .github/workflows/    # CI (backend-tests.yml: pytest + Vitest on PRs into main)
+├── .github/workflows/
+│   ├── backend-tests.yml       # CI: pytest + Vitest on PRs into main
+│   └── deploy-production.yml   # Manual (workflow_dispatch) build-and-deploy to PROD
 ├── backend/              # FastAPI API and game engine
 │   ├── certs/            # Local self-signed TLS cert (gitignored, generated — see Quick Start)
 │   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
@@ -196,10 +198,14 @@ KanGame2/
 │       ├── stores/       # Pinia state (gameStore.js, authStore.js) + __tests__/ (Vitest)
 │       ├── services/     # API client
 │       └── views/        # Home, game, demo game, and leaderboard pages
-├── nginx/                # Reverse proxy config
+├── nginx/                # Dev reverse proxy config (docker-compose.yml only)
+├── deploy/vhost.d/       # nginx-proxy vhost snippets for kangame.pmi.moscow (copied onto the PROD host manually)
 ├── LICENSE               # MIT license
+├── Dockerfile                      # PROD image: builds frontend, backend serves it as static files on one port
 ├── docker-compose.yml
-└── docker-compose.test.yml  # Test overlay: enables /api/dev/test-login
+├── docker-compose.production.yml   # PROD stack: single `app` container + `db`, joins the shared reverse-proxy network
+├── docker-compose.test.yml         # Test overlay: enables /api/dev/test-login
+└── .env.production.example         # Template for the PROD host's .env (see Production Deployment)
 ```
 
 ---
@@ -242,6 +248,19 @@ docker compose down --rmi all --remove-orphans
 docker compose build --no-cache
 docker compose up -d --force-recreate
 ```
+
+---
+
+## 🚢 Production Deployment
+
+Production runs as a **single container**: the root [`Dockerfile`](Dockerfile) builds the Vue frontend, then bakes the resulting static assets into the FastAPI image, which serves both the API and the SPA (with client-side-routing fallback) on one port. There's no separate frontend/nginx container in prod — TLS and the public domain (`https://kangame.pmi.moscow`) are handled by an external shared [`nginx-proxy`](https://github.com/nginx-proxy/nginx-proxy) reverse proxy that isn't part of this repo.
+
+- [`docker-compose.production.yml`](docker-compose.production.yml) — the `app` service (image `kangame:latest`) plus `db` (Postgres). `app` joins the external `pmi_network` so `nginx-proxy` can discover it via `VIRTUAL_HOST`/`VIRTUAL_PORT`; `db` stays on the internal network only.
+- [`.github/workflows/deploy-production.yml`](.github/workflows/deploy-production.yml) — manual (`workflow_dispatch`) pipeline: builds and pushes the image to `ghcr.io/toptuk/kangame:latest`, then SSHes into the host to pull the image, sync `docker-compose.production.yml`, and recreate the stack.
+- [`deploy/vhost.d/`](deploy/vhost.d/) — `nginx-proxy` vhost config for `kangame.pmi.moscow` (TLS settings + security/gzip headers), copied onto the host's `rproxy/vhost.d/` directory by hand — this repo's pipeline never touches the shared reverse-proxy config.
+- [`.env.production.example`](.env.production.example) — template for the real secrets file that must exist at `/home/toptuk/kangame/.env` on the host **before the first deploy** (the pipeline never creates or overwrites it).
+
+Required one-time setup on the host, none of which the pipeline does for you: create `/home/toptuk/kangame/.env` from the example above with real OIDC/session secrets, and place the `deploy/vhost.d/` files into the reverse proxy's `vhost.d/`. After that, running the workflow builds, pushes, and redeploys the app.
 
 ---
 

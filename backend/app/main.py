@@ -1,7 +1,10 @@
 import asyncio
 import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import text, select
 
@@ -102,3 +105,16 @@ app.include_router(demo.router, prefix="/api/demo", tags=["demo"])
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+STATIC_DIR = "static"
+
+if os.path.isdir(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=f"{STATIC_DIR}/assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        candidate = os.path.join(STATIC_DIR, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
