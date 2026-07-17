@@ -167,22 +167,34 @@
     <footer class="relative text-center py-4 text-slate-600 text-sm border-t border-white/5">
       {{ t('home.footer') }}
     </footer>
+
+    <DesktopOnlyModal v-if="showDesktopOnlyModal" @close="showDesktopOnlyModal = false" />
   </div>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { gamesApi } from '../services/api.js'
 import { useGameContent } from '../composables/useGameContent.js'
 import { useAuthStore } from '../stores/authStore.js'
+import { useIsMobileOrTablet } from '../composables/useIsMobileOrTablet.js'
 import LanguageSelector from '../components/LanguageSelector.vue'
+import DesktopOnlyModal from '../components/DesktopOnlyModal.vue'
 
 const { t } = useI18n()
 const { statusLabel } = useGameContent()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+const { isMobileOrTablet } = useIsMobileOrTablet()
+
+const showDesktopOnlyModal = ref(false)
+if (route.query.blocked) {
+  showDesktopOnlyModal.value = true
+  router.replace({ path: '/' })
+}
 
 function fmtRub(n) {
   return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
@@ -230,6 +242,10 @@ watch(
 )
 
 async function startGame() {
+  if (isMobileOrTablet.value) {
+    showDesktopOnlyModal.value = true
+    return
+  }
   creating.value = true
   try {
     const res = await gamesApi.create({

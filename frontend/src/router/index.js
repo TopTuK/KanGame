@@ -4,6 +4,10 @@ import GameView from '../views/GameView.vue'
 import DemoGameView from '../views/DemoGameView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
 import { useAuthStore } from '../stores/authStore.js'
+import { useIsMobileOrTablet } from '../composables/useIsMobileOrTablet.js'
+import { trackPageView } from '../utils/googleAnalytics.js'
+
+const DESKTOP_ONLY_ROUTES = ['game', 'demo']
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
@@ -18,6 +22,11 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  const { isMobileOrTablet } = useIsMobileOrTablet()
+  if (DESKTOP_ONLY_ROUTES.includes(to.name) && isMobileOrTablet.value) {
+    return { path: '/', query: { blocked: '1' } }
+  }
+
   if (!to.meta.requiresAuth) return true
 
   const authStore = useAuthStore()
@@ -28,6 +37,10 @@ router.beforeEach(async (to) => {
     return '/'
   }
   return true
+})
+
+router.afterEach((to) => {
+  trackPageView(to.fullPath, to.name)
 })
 
 export default router

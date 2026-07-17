@@ -240,6 +240,11 @@
     "empty": "No work was performed.",
     "close": "Close"
   },
+  "desktopOnly": {
+    "title": "Please use a computer",
+    "message": "KanGame's board relies on drag-and-drop and isn't playable on phones or tablets yet. Please open this site on a computer to start, continue, or review a game.",
+    "gotIt": "Got it"
+  },
   "endDay": {
     "overdueTitle": "Overdue stories removed from board:"
   },
