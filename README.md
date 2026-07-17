@@ -94,7 +94,7 @@ KanGame uses a **backend-driven OIDC Authorization Code flow** (via [Authlib](ht
 3. The browser is redirected back to the SPA. Every subsequent `/api/*` call is authenticated via that cookie through `get_current_user`.
 4. `GET /api/auth/me` reports the current user to the frontend; `POST /api/auth/logout` clears the session.
 
-Configure the provider in `.env` (see Quick Start and Local Development below) — `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl`, plus `SESSION_SECRET_KEY`, `FRONTEND_URL`, and `BACKEND_PUBLIC_URL`.
+Configure the provider in `.env` (see Quick Start and Local Development below) — `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl`, plus `SESSION_SECRET_KEY` and `BASE_URL`.
 
 A separate, **test-only** login path (`POST /api/dev/test-login`) bypasses OIDC entirely; it 404s unless `ENABLE_TEST_LOGIN=true` and exists solely so the e2e suite can authenticate without a real identity provider — see [🧪 Testing](#-testing).
 
@@ -180,7 +180,6 @@ KanGame2/
 │   ├── backend-tests.yml       # CI: pytest + Vitest on PRs into main
 │   └── deploy-production.yml   # Manual (workflow_dispatch) build-and-deploy to PROD
 ├── backend/              # FastAPI API and game engine
-│   ├── certs/            # Local self-signed TLS cert (gitignored, generated — see Quick Start)
 │   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
 │   └── app/
 │       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py, demo.py)
@@ -214,17 +213,11 @@ KanGame2/
 
 **Prerequisites:** [Docker](https://docs.docker.com/get-docker/), Docker Compose, and OpenSSL
 
-1. Create `.env` in the repo root (copy `.env.example`) with your OIDC provider's `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl=/auth/signin-oidc`, a random `SESSION_SECRET_KEY` (e.g. `openssl rand -hex 32`), and `FRONTEND_URL` / `BACKEND_PUBLIC_URL` (defaults `http://localhost` / `https://localhost:8000` work for local dev).
-2. Generate a local self-signed TLS cert for the backend — the OIDC provider redirects to `https://localhost:8000`, so the backend must serve HTTPS there:
-   ```bash
-   mkdir -p backend/certs
-   openssl req -x509 -newkey rsa:2048 -nodes -keyout backend/certs/localhost.key -out backend/certs/localhost.crt -days 365 -subj "/CN=localhost"
-   ```
-3. Start the stack:
+1. Create `.env` in the repo root (copy `.env.example`) with your OIDC provider's `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl=/auth/signin-oidc`, a random `SESSION_SECRET_KEY` (e.g. `openssl rand -hex 32`), and `BASE_URL` (default `http://localhost` works for local dev). Register `http://localhost/auth/signin-oidc` as the redirect URI with your OIDC provider.
+2. Start the stack:
    ```bash
    docker compose up --build
    ```
-4. Visit `https://localhost:8000/health` once and accept the browser's self-signed-certificate warning — otherwise the provider's redirect back to the backend will fail silently.
 
 Open [http://localhost](http://localhost) in your browser and sign in to start a game.
 
@@ -233,7 +226,7 @@ Open [http://localhost](http://localhost) in your browser and sign in to start a
 | 🌐 App | http://localhost |
 | 📖 API docs | http://localhost/api/docs |
 | ❤️ Health | http://localhost/health |
-| 🔐 Backend (HTTPS, OIDC callback only) | https://localhost:8000 |
+| 🔧 Backend (direct, debug only) | http://localhost:8000 |
 
 To stop:
 
@@ -290,15 +283,14 @@ AuthClientSecret=...
 AuthAuthority=https://your-oidc-provider/
 AuthCallbackUrl=/auth/signin-oidc
 SESSION_SECRET_KEY=...
-FRONTEND_URL=http://localhost
-BACKEND_PUBLIC_URL=https://localhost:8000
+BASE_URL=http://localhost
 SESSION_COOKIE_SECURE=false
 ```
 
-Start the API — the registered OIDC callback is `https://localhost:8000`, so it must run over HTTPS using the self-signed cert generated in the Quick Start section above:
+Start the API:
 
 ```bash
-uvicorn app.main:app --reload --port 8000 --ssl-certfile certs/localhost.crt --ssl-keyfile certs/localhost.key
+uvicorn app.main:app --reload --port 8000
 ```
 
 📖 API docs: http://localhost:8000/api/docs
@@ -313,11 +305,15 @@ npm install
 npm run dev
 ```
 
-When running outside Docker, update the API proxy in `frontend/vite.config.js`:
+When running outside Docker, update the proxy targets in `frontend/vite.config.js`:
 
 ```js
 proxy: {
   '/api': {
+    target: 'http://localhost:8000',
+    changeOrigin: true,
+  },
+  '/auth': {
     target: 'http://localhost:8000',
     changeOrigin: true,
   },

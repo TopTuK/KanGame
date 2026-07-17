@@ -7,8 +7,7 @@ services:
       AuthClientSecret: ${AuthClientSecret}
       AuthAuthority: ${AuthAuthority}
       AuthCallbackUrl: ${AuthCallbackUrl}
-      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL}
-      FRONTEND_URL: ${FRONTEND_URL}
+      BASE_URL: ${BASE_URL}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
       SESSION_COOKIE_SECURE: "true"
       VIRTUAL_HOST: kangame.pmi.moscow

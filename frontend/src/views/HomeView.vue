@@ -206,7 +206,7 @@ const usernameDraft = ref('')
 const savingUsername = ref(false)
 
 function signIn() {
-  window.location.href = 'https://localhost:8000/auth/login'
+  window.location.href = '/auth/login'
 }
 
 async function loadGames() {

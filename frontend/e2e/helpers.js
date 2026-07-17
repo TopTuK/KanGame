@@ -39,20 +39,20 @@ export function columnBody(page, columnKey) {
   return page.locator(`[data-column="${columnKey}"]`)
 }
 
-// Drags the card identified by cardKey onto targetLocator via a real native
-// mouse down/move/up sequence, which reliably triggers HTML5
-// dragstart/dragover/drop events in headless Chromium.
-export async function dragCardTo(page, cardKey, targetLocator, { steps = 12 } = {}) {
+// Drags the card identified by cardKey onto targetLocator by dispatching the
+// native HTML5 DragEvent sequence directly (dragstart/dragenter/dragover/drop/
+// dragend) with a shared DataTransfer, rather than simulating physical mouse
+// movement. Chromium's synthetic mouse-based drag simulation is unreliable
+// for repeated drags within a single test (later drags in a sequence
+// silently no-op); dispatching the events directly is deterministic and is
+// Playwright's documented approach for native drag-and-drop.
+export async function dragCardTo(page, cardKey, targetLocator) {
   const source = cardContainer(page, cardKey)
-  const sourceBox = await source.boundingBox()
-  const targetBox = await targetLocator.boundingBox()
-  const startX = sourceBox.x + sourceBox.width / 2
-  const startY = sourceBox.y + sourceBox.height / 2
-  await page.mouse.move(startX, startY)
-  await page.mouse.down()
-  // A small initial nudge is required to cross the browser's native
-  // drag-initiation threshold before jumping to the actual target.
-  await page.mouse.move(startX + 5, startY + 5, { steps: 5 })
-  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps })
-  await page.mouse.up()
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+
+  await source.dispatchEvent('dragstart', { dataTransfer })
+  await targetLocator.dispatchEvent('dragenter', { dataTransfer })
+  await targetLocator.dispatchEvent('dragover', { dataTransfer })
+  await targetLocator.dispatchEvent('drop', { dataTransfer })
+  await source.dispatchEvent('dragend', { dataTransfer })
 }
