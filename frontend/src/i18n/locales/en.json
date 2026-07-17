@@ -14,10 +14,6 @@
     "realMetrics": "Real Metrics",
     "realMetricsDesc": "Track throughput, WIP, cycle time, and cumulative flow across days 9–35",
     "startNewGame": "Start New Game",
-    "yourName": "Your Name",
-    "yourNamePlaceholder": "e.g. Alex",
-    "gameName": "Game Name",
-    "gameNamePlaceholder": "e.g. Sprint Planning Session",
     "creating": "Creating…",
     "startGame": "🚀 Start Game",
     "recentGames": "Recent Games",
@@ -243,6 +239,11 @@
     "title": "Work Log",
     "empty": "No work was performed.",
     "close": "Close"
+  },
+  "desktopOnly": {
+    "title": "Please use a computer",
+    "message": "KanGame's board relies on drag-and-drop and isn't playable on phones or tablets yet. Please open this site on a computer to start, continue, or review a game.",
+    "gotIt": "Got it"
   },
   "endDay": {
     "overdueTitle": "Overdue stories removed from board:"

@@ -76,36 +76,14 @@
         <div class="flex items-center justify-between mb-6">
           <h2 class="font-display text-2xl font-bold text-white text-center flex-1">{{ t('home.startNewGame') }}</h2>
         </div>
-        <form @submit.prevent="startGame" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-300 mb-1">{{ t('home.yourName') }}</label>
-            <input
-              v-model="playerName"
-              type="text"
-              :placeholder="t('home.yourNamePlaceholder')"
-              required
-              class="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-300 mb-1">{{ t('home.gameName') }}</label>
-            <input
-              v-model="gameName"
-              type="text"
-              :placeholder="t('home.gameNamePlaceholder')"
-              required
-              class="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
-            />
-          </div>
-          <button
-            type="submit"
-            :disabled="creating"
-            class="w-full btn-primary text-lg py-3 rounded-xl mt-2"
-          >
-            <span v-if="creating">{{ t('home.creating') }}</span>
-            <span v-else>{{ t('home.startGame') }}</span>
-          </button>
-        </form>
+        <button
+          @click="startGame"
+          :disabled="creating"
+          class="w-full btn-primary text-lg py-3 rounded-xl mt-2"
+        >
+          <span v-if="creating">{{ t('home.creating') }}</span>
+          <span v-else>{{ t('home.startGame') }}</span>
+        </button>
         <button
           @click="authStore.logout()"
           class="w-full mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors"
@@ -189,28 +167,38 @@
     <footer class="relative text-center py-4 text-slate-600 text-sm border-t border-white/5">
       {{ t('home.footer') }}
     </footer>
+
+    <DesktopOnlyModal v-if="showDesktopOnlyModal" @close="showDesktopOnlyModal = false" />
   </div>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { gamesApi } from '../services/api.js'
 import { useGameContent } from '../composables/useGameContent.js'
 import { useAuthStore } from '../stores/authStore.js'
+import { useIsMobileOrTablet } from '../composables/useIsMobileOrTablet.js'
 import LanguageSelector from '../components/LanguageSelector.vue'
+import DesktopOnlyModal from '../components/DesktopOnlyModal.vue'
 
 const { t } = useI18n()
 const { statusLabel } = useGameContent()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+const { isMobileOrTablet } = useIsMobileOrTablet()
+
+const showDesktopOnlyModal = ref(false)
+if (route.query.blocked) {
+  showDesktopOnlyModal.value = true
+  router.replace({ path: '/' })
+}
 
 function fmtRub(n) {
   return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
 }
-const playerName = ref('')
-const gameName = ref('')
 const creating = ref(false)
 const games = ref([])
 const editingUsername = ref(false)
@@ -248,18 +236,20 @@ watch(
   (checked) => {
     if (checked && authStore.isAuthenticated) {
       loadGames()
-      if (!playerName.value) playerName.value = authStore.user?.username || ''
     }
   },
   { immediate: true }
 )
 
 async function startGame() {
+  if (isMobileOrTablet.value) {
+    showDesktopOnlyModal.value = true
+    return
+  }
   creating.value = true
   try {
     const res = await gamesApi.create({
-      name: gameName.value,
-      player_name: playerName.value,
+      player_name: authStore.user?.username || '',
     })
     router.push(`/game/${res.data.id}`)
   } finally {
