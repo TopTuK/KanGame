@@ -43,6 +43,7 @@ jobs:
     needs: build
     env:
       SSH_KEY_PATH: /tmp/ssh_key
+      ENV_FILE_PATH: /tmp/production.env
       SSH_PORT: 45654
     steps:
       - name: Checkout
@@ -62,6 +63,30 @@ jobs:
             echo "::error::PRODUCTION_SSH_KEY secret is not set or empty"
             exit 1
           fi
+          if [ -z "${{ secrets.AuthClientId }}" ]; then
+            echo "::error::AuthClientId secret is not set or empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AuthClientSecret }}" ]; then
+            echo "::error::AuthClientSecret secret is not set or empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AuthAuthority }}" ]; then
+            echo "::error::AuthAuthority secret is not set or empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.AuthCallbackUrl }}" ]; then
+            echo "::error::AuthCallbackUrl secret is not set or empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.BASE_URL }}" ]; then
+            echo "::error::BASE_URL secret is not set or empty"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SESSION_SECRET_KEY }}" ]; then
+            echo "::error::SESSION_SECRET_KEY secret is not set or empty"
+            exit 1
+          fi
 
       - name: Setup SSH key
         run: |
@@ -69,10 +94,22 @@ jobs:
           chmod 600 ${{ env.SSH_KEY_PATH }}
           head -n1 ${{ env.SSH_KEY_PATH }} | grep -q "BEGIN.*KEY" || (echo "Invalid key format" && exit 1)
 
-      - name: Copy docker-compose to server
+      - name: Generate production .env
+        run: |
+          {
+            echo "AuthClientId=${{ secrets.AuthClientId }}"
+            echo "AuthClientSecret=${{ secrets.AuthClientSecret }}"
+            echo "AuthAuthority=${{ secrets.AuthAuthority }}"
+            echo "AuthCallbackUrl=${{ secrets.AuthCallbackUrl }}"
+            echo "BASE_URL=${{ secrets.BASE_URL }}"
+            echo "SESSION_SECRET_KEY=${{ secrets.SESSION_SECRET_KEY }}"
+          } > ${{ env.ENV_FILE_PATH }}
+          chmod 600 ${{ env.ENV_FILE_PATH }}
+
+      - name: Copy docker-compose and .env to server
         run: |
           scp -P ${{ env.SSH_PORT }} -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i ${{ env.SSH_KEY_PATH }} \
-            docker-compose.production.yml \
+            docker-compose.production.yml ${{ env.ENV_FILE_PATH }} \
             ${{ secrets.PRODUCTION_SSH_USERNAME }}@${{ secrets.PRODUCTION_SSH_HOST }}:/home/toptuk/kangame/
 
       - name: Deploy on PROD server
@@ -80,9 +117,15 @@ jobs:
           ssh -p ${{ env.SSH_PORT }} -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i ${{ env.SSH_KEY_PATH }} \
             ${{ secrets.PRODUCTION_SSH_USERNAME }}@${{ secrets.PRODUCTION_SSH_HOST }} \
             "cd /home/toptuk/kangame && \
+             mv production.env .env && \
+             chmod 600 .env && \
              docker login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.TOKEN }} && \
              docker pull ${{ env.IMAGE_NAME }}:latest && \
              docker tag ${{ env.IMAGE_NAME }}:latest kangame:latest && \
              docker compose -f docker-compose.production.yml down --remove-orphans && \
              docker compose -f docker-compose.production.yml up -d --no-build --force-recreate && \
              docker image prune -af"
+
+      - name: Clean up local secrets
+        if: always()
+        run: rm -f ${{ env.SSH_KEY_PATH }} ${{ env.ENV_FILE_PATH }}

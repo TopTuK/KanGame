@@ -12,6 +12,7 @@ services:
       SESSION_COOKIE_SECURE: "true"
       VIRTUAL_HOST: kangame.pmi.moscow
       VIRTUAL_PORT: "8000"
+      VIRTUAL_PROTO: "https"
     depends_on:
       db:
         condition: service_healthy
