@@ -18,7 +18,7 @@ TEST_USER_SUB = "e2e-test-user"
 
 @router.get("/auth/login")
 async def login(request: Request):
-    redirect_uri = f"{settings.BACKEND_PUBLIC_URL}{settings.AuthCallbackUrl}"
+    redirect_uri = f"{settings.BASE_URL}{settings.AuthCallbackUrl}"
     return await oauth.oidc.authorize_redirect(request, redirect_uri)
 
 
@@ -45,7 +45,7 @@ async def signin_callback(request: Request, db: AsyncSession = Depends(get_db)):
     request.session["user_id"] = str(user.id)
     await db.commit()
 
-    return RedirectResponse(settings.FRONTEND_URL, status_code=303)
+    return RedirectResponse(settings.BASE_URL, status_code=303)
 
 
 @router.post("/api/dev/test-login", response_model=UserResponse)
