@@ -2,6 +2,8 @@
 
 [![Tests](https://github.com/TopTuK/KanGame/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/TopTuK/KanGame/actions/workflows/backend-tests.yml)
 
+🌐 **Live at [kangame.pmi.moscow](https://kangame.pmi.moscow)** — try it instantly in **demo mode**, no registration required.
+
 An interactive web simulation of Kanban methodology, inspired by [getKanban®](https://www.agile42.com/en/get-kanban/) — the Lean/Agile board game. Manage flow, limit WIP, assign team resources, handle different classes of service, and deliver value from Day 9 through Day 35 to maximize revenue.
 
 > 🤖 **Built with AI assistance** — This project was created with help from [Claude Code](https://claude.ai/code) and [Cursor](https://cursor.com). Architecture, game logic, UI components, and infrastructure were developed through human–AI collaboration.
