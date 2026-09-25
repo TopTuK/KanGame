@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col flex-shrink-0 rounded-xl border border-board-colborder/60 bg-board-col/40 overflow-hidden">
+  <div class="flex flex-col flex-shrink-0 grow-[2] rounded-xl border border-board-colborder/60 bg-board-col/40 overflow-hidden">
     <div :class="['px-2 py-2 flex items-center justify-between', headerClass]">
       <div class="flex items-center gap-1.5 min-w-0">
         <span class="text-sm">{{ activeColumn.icon }}</span>
