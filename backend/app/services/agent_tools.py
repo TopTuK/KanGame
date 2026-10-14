@@ -17,6 +17,7 @@ from pydantic import Field
 from app.core.database import AsyncSessionLocal
 from app.services import action_log, game_engine
 from app.services.action_log import ACTOR_AGENT
+from app.services.agent_prompts import board_text
 
 
 @dataclass
@@ -69,21 +70,21 @@ async def _resolve_card(db, ctx: RunContext, card_key: str) -> tuple[Optional[uu
 def make_tools(ctx: RunContext) -> list[FunctionTool]:
 
     async def get_game_state() -> str:
-        """Look at the board: day, revenue, WIP limits and counts, workers and all visible cards.
-        Card fields: key, type, col (column), rem=[analysis,dev,test] remaining points,
-        pull_to (where a pull moves it), val, due (deadline day), blocked (blocker points left), age."""
+        """Show the current board: cards grouped by column (with work left in their current stage
+        and who works on them), WIP usage per stage, active and unavailable workers, and the
+        pulls that are possible right now."""
         if stop := _gate(ctx, mutating=False):
             return stop
         async with AsyncSessionLocal() as db:
             game = await game_engine.get_game(db, ctx.game_id, ctx.user_id)
             if not game:
                 return "ERROR: game not found"
-            state = action_log.snapshot(game)
+            board = board_text(game)
             await action_log.record(
                 db, ctx.game_id, game.current_day, ACTOR_AGENT, "get_game_state",
                 result={"ok": True}, run_id=ctx.run_id,
             )
-        return _dump(state)
+        return board
 
     async def pull_card(
         card_key: Annotated[str, Field(description="Key of the card to pull one column to the right, e.g. 'S14'.")],

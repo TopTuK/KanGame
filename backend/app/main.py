@@ -42,32 +42,7 @@ app.add_middleware(
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    migrations = [
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS deployment_bonus INTEGER DEFAULT 0",
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS val INTEGER DEFAULT 0",
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS blocker_remaining INTEGER DEFAULT 0",
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS blocker_total INTEGER DEFAULT 0",
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS appear_day INTEGER",
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS buff VARCHAR(20)",
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS entered_day INTEGER",
-        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 0",
-        "ALTER TABLE games ADD COLUMN IF NOT EXISTS daily_revenue INTEGER DEFAULT 0",
-        "ALTER TABLE games ADD COLUMN IF NOT EXISTS work_done BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE games ADD COLUMN IF NOT EXISTS carlos_policy BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE games ADD COLUMN IF NOT EXISTS lockdown BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE games ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE games ADD COLUMN IF NOT EXISTS is_agent BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)",
-    ]
-    async with engine.begin() as conn:
-        for sql in migrations:
-            await conn.execute(text(sql))
-        try:
-            await conn.execute(text(
-                "UPDATE cards SET column = 'backlog' WHERE column::text = 'options'"
-            ))
-        except Exception:
-            pass
+    await run_migrations()
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(User).where(User.username.is_(None)))
@@ -90,6 +65,40 @@ async def startup():
     await _ensure_agent_indexes()
 
     asyncio.create_task(_demo_cleanup_loop())
+
+
+async def run_migrations():
+    """Add columns to tables that predate them (create_all never alters existing tables)."""
+    migrations = [
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS deployment_bonus INTEGER DEFAULT 0",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS val INTEGER DEFAULT 0",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS blocker_remaining INTEGER DEFAULT 0",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS blocker_total INTEGER DEFAULT 0",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS appear_day INTEGER",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS buff VARCHAR(20)",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS entered_day INTEGER",
+        "ALTER TABLE cards ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 0",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS daily_revenue INTEGER DEFAULT 0",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS work_done BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS carlos_policy BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS lockdown BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS is_agent BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)",
+    ]
+    async with engine.begin() as conn:
+        for sql in migrations:
+            await conn.execute(text(sql))
+    # Legacy data fix, in its own transaction: a failing statement aborts the
+    # whole Postgres transaction, so sharing one with the ALTERs above would
+    # silently roll them back. `column` is a reserved word and must be quoted.
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                """UPDATE cards SET "column" = 'backlog' WHERE "column"::text = 'options'"""
+            ))
+    except Exception:
+        logger.exception("Legacy 'options' column fix failed")
 
 
 async def _ensure_agent_indexes():
