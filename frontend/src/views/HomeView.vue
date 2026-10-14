@@ -84,6 +84,12 @@
           <span v-if="creating">{{ t('home.creating') }}</span>
           <span v-else>{{ t('home.startGame') }}</span>
         </button>
+        <router-link
+          to="/agent"
+          class="block w-full btn-secondary text-center py-2.5 rounded-xl mt-3"
+        >
+          🤖 {{ t('home.startAgent') }}
+        </router-link>
         <button
           @click="authStore.logout()"
           class="w-full mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors"
@@ -115,7 +121,13 @@
             class="glass rounded-xl px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-white/10 transition-colors group"
           >
             <div>
-              <div class="font-semibold text-white group-hover:text-sky-400 transition-colors">{{ g.name }}</div>
+              <div class="font-semibold text-white group-hover:text-sky-400 transition-colors flex items-center gap-2">
+                <span>{{ g.name }}</span>
+                <span
+                  v-if="g.is_agent"
+                  class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300"
+                >{{ t('home.agentBadge') }}</span>
+              </div>
               <div class="text-sm text-slate-400">
                 {{ g.player_name }} · {{ t('home.dayOf', { current: g.current_day, total: g.total_days }) }}
               </div>

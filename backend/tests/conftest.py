@@ -23,6 +23,7 @@ import pytest_asyncio
 from sqlalchemy import delete
 
 from app.core.database import AsyncSessionLocal, Base, engine
+from app.models.agent import AgentRun, GameAction
 from app.models.game import Card, Game, GameEvent, GameMetric
 from app.models.user import User
 from app.services import game_engine
@@ -38,6 +39,8 @@ async def db_session():
         yield session
 
     async with AsyncSessionLocal() as session:
+        await session.execute(delete(GameAction))
+        await session.execute(delete(AgentRun))
         await session.execute(delete(GameMetric))
         await session.execute(delete(GameEvent))
         await session.execute(delete(Card))
@@ -74,6 +77,23 @@ async def demo_user(db_session):
     await db_session.commit()
     await db_session.refresh(u)
     return u
+
+
+@pytest_asyncio.fixture
+async def api_client(user):
+    """HTTP client against the FastAPI app, authenticated as `user` (no OIDC, no startup hooks)."""
+    import httpx
+    from app.core.auth import get_current_user
+    from app.main import app
+
+    async def _current_user():
+        return user
+
+    app.dependency_overrides[get_current_user] = _current_user
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture

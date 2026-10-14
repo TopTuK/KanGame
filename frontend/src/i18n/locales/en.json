@@ -6,6 +6,8 @@
     "select": "Select language"
   },
   "home": {
+    "startAgent": "Run AI agent",
+    "agentBadge": "AI",
     "tagline": "Experience Kanban methodology through an interactive simulation. Manage flow, limit WIP, and deliver value to earn maximum revenue.",
     "pullSystem": "Pull System",
     "pullSystemDesc": "Experience true Kanban pull — work flows from right to left based on capacity",
@@ -295,5 +297,61 @@
     }
   },
   "cards": {},
-  "events": {}
+  "events": {},
+  "agent": {
+    "title": "AI Agent Simulation",
+    "subtitle": "An LLM agent plays the simulation exactly like a player: it reads the board, pulls cards, assigns people, starts work and ends days. Every action and its reason is logged.",
+    "back": "← Home",
+    "newRun": "Start a new agent run",
+    "name": "Agent name",
+    "namePlaceholder": "e.g. GPT-4o baseline",
+    "baseUrl": "Base URL (OpenAI-compatible)",
+    "model": "Model",
+    "apiKey": "API key",
+    "apiKeyHint": "Used only for this run, kept in server memory and never stored.",
+    "apiKeyServerPlaceholder": "Optional — server key will be used",
+    "apiKeyServerHint": "Leave blank to use the server's OpenRouter key. Your own key is used only for this run and never stored.",
+    "resetDefaults": "Use default provider (OpenRouter · {model})",
+    "start": "Start agent",
+    "starting": "Starting…",
+    "activeRunExists": "An agent run is already in progress.",
+    "runs": "Runs",
+    "noRuns": "No agent runs yet.",
+    "selectRun": "Select a run to see its action log.",
+    "openBoard": "Open board",
+    "cancel": "Cancel run",
+    "cancelling": "Cancelling…",
+    "downloadLog": "Download log (JSON)",
+    "loadOlder": "Load older actions",
+    "dayProgress": "Day {current}/{total}",
+    "revenue": "Revenue",
+    "toolCalls": "Tool calls",
+    "tokens": "Tokens",
+    "error": "Error",
+    "day": "Day {day}",
+    "dayLabel": "Day",
+    "dayNote": "Agent's note",
+    "actors": {
+      "agent": "agent",
+      "system": "system",
+      "human": "human"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "actions": {
+      "day_start": "Day start (board snapshot)",
+      "get_game_state": "Looked at the board",
+      "pull_card": "Pull card",
+      "assign_worker": "Assign worker",
+      "start_work": "Start work",
+      "end_day": "End day",
+      "day_summary": "Day note",
+      "run_event": "Run"
+    }
+  }
 }

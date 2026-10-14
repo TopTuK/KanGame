@@ -3,17 +3,19 @@ import HomeView from '../views/HomeView.vue'
 import GameView from '../views/GameView.vue'
 import DemoGameView from '../views/DemoGameView.vue'
 import LeaderboardView from '../views/LeaderboardView.vue'
+import AgentView from '../views/AgentView.vue'
 import { useAuthStore } from '../stores/authStore.js'
 import { useIsMobileOrTablet } from '../composables/useIsMobileOrTablet.js'
 import { trackPageView } from '../utils/googleAnalytics.js'
 
-const DESKTOP_ONLY_ROUTES = ['game', 'demo']
+const DESKTOP_ONLY_ROUTES = ['game', 'demo', 'agent']
 
 const routes = [
   { path: '/', name: 'home', component: HomeView },
   { path: '/game/:id', name: 'game', component: GameView, meta: { requiresAuth: true } },
   { path: '/demo', name: 'demo', component: DemoGameView },
   { path: '/leaderboard', name: 'leaderboard', component: LeaderboardView },
+  { path: '/agent', name: 'agent', component: AgentView, meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

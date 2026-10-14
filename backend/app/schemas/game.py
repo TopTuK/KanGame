@@ -83,6 +83,7 @@ class GameResponse(BaseModel):
     carlos_policy: bool
     lockdown: bool
     is_demo: bool
+    is_agent: bool = False
     team_config: dict
     wip_limits: dict
     day_capacity_used: dict
@@ -144,6 +145,7 @@ class GameListItem(BaseModel):
     current_day: int
     total_days: int
     total_revenue: int
+    is_agent: bool = False
 
     class Config:
         from_attributes = True

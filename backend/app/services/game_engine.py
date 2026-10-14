@@ -168,7 +168,7 @@ def can_pull_to(game: Game, wip_key: str) -> bool:
 
 async def create_game(
     db: AsyncSession, name: str, player_name: str, user_id: uuid.UUID,
-    total_days: int = 35, is_demo: bool = False,
+    total_days: int = 35, is_demo: bool = False, is_agent: bool = False,
 ) -> Game:
     game = Game(
         id=uuid.uuid4(),
@@ -179,6 +179,7 @@ async def create_game(
         current_day=9,
         total_days=total_days,
         is_demo=is_demo,
+        is_agent=is_agent,
         phase="planning",
         work_done=False,
         carlos_policy=False,
@@ -278,13 +279,17 @@ async def delete_demo_games(db: AsyncSession, older_than: timedelta = timedelta(
     demo_ids = [row[0] for row in ids_result.all()]
     if not demo_ids:
         return 0
-
-    await db.execute(delete(Card).where(Card.game_id.in_(demo_ids)))
-    await db.execute(delete(GameEvent).where(GameEvent.game_id.in_(demo_ids)))
-    await db.execute(delete(GameMetric).where(GameMetric.game_id.in_(demo_ids)))
-    await db.execute(delete(Game).where(Game.id.in_(demo_ids)))
-    await db.commit()
+    await delete_games(db, demo_ids)
     return len(demo_ids)
+
+
+async def delete_games(db: AsyncSession, game_ids: list[uuid.UUID]) -> None:
+    """Hard-delete games with their cards, events and metrics (games without action-log rows)."""
+    await db.execute(delete(Card).where(Card.game_id.in_(game_ids)))
+    await db.execute(delete(GameEvent).where(GameEvent.game_id.in_(game_ids)))
+    await db.execute(delete(GameMetric).where(GameMetric.game_id.in_(game_ids)))
+    await db.execute(delete(Game).where(Game.id.in_(game_ids)))
+    await db.commit()
 
 
 async def get_game(db: AsyncSession, game_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Game]:
@@ -306,7 +311,11 @@ async def get_all_games(db: AsyncSession, user_id: uuid.UUID) -> list[Game]:
 async def get_top_leaderboard(db: AsyncSession, limit: int = 5) -> list[dict]:
     subq = (
         select(Game.user_id, func.max(Game.total_revenue).label("best_revenue"))
-        .where(Game.status == GameStatus.completed, Game.is_demo.is_(False))
+        .where(
+            Game.status == GameStatus.completed,
+            Game.is_demo.is_(False),
+            Game.is_agent.is_(False),
+        )
         .group_by(Game.user_id)
         .subquery()
     )
