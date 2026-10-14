@@ -20,13 +20,26 @@ STAGE_FOR_ROLE = {"analyst": "analysis", "developer": "development", "tester": "
 WORKING = ("analysis", "development", "test", "exp_analysis", "exp_development", "exp_test")
 
 
+async def _structured_state() -> dict:
+    """The scripted player reads the same snapshot the action log stores (each test has one active agent game)."""
+    from app.core.database import AsyncSessionLocal
+    from app.services.action_log import snapshot
+
+    async with AsyncSessionLocal() as db:
+        game_id, user_id = (await db.execute(
+            select(Game.id, Game.user_id).where(Game.is_agent.is_(True), Game.status == GameStatus.active)
+        )).one()
+        return snapshot(await ge.get_game(db, game_id, user_id))
+
+
 async def play_day(tools, prompt):
     """A simple human-like strategy: deploy, pull right-to-left, staff every worker, work, end day."""
-    state = json.loads(await tools["get_game_state"]())
+    await tools["get_game_state"]()
+    state = await _structured_state()
     for col in ("test_done", "dev_done", "analysis_done", "ready"):
         for card in [c for c in state["cards"] if c["col"] == col]:
             await tools["pull_card"](card_key=card["key"], reason=f"Pull from {col}")
-    state = json.loads(await tools["get_game_state"]())
+    state = await _structured_state()
     working = [c for c in state["cards"] if c["col"] in WORKING and not c.get("blocked")]
     for w in (w for w in state["workers"] if w["active"]):
         own = [c for c in working if c["col"].endswith(STAGE_FOR_ROLE[w["type"]])]

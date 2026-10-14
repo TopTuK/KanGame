@@ -22,7 +22,7 @@ from app.models.agent import AgentRun, AgentRunStatus, ACTIVE_RUN_STATUSES
 from app.models.game import GameStatus
 from app.services import action_log, game_engine
 from app.services.action_log import ACTOR_AGENT, ACTOR_SYSTEM
-from app.services.agent_prompts import KANBAN_INSTRUCTIONS, day_prompt
+from app.services.agent_prompts import KANBAN_INSTRUCTIONS, board_text, day_prompt
 from app.services.agent_tools import RunContext, make_tools
 
 logger = logging.getLogger(__name__)
@@ -216,7 +216,7 @@ async def run_agent(ctx: RunContext, api_key: str, base_url: str, model: str) ->
 
                 day = game.current_day
                 ctx.begin_day(day)
-                prompt = day_prompt(day, game.total_days, ctx.last_modal, note, _deadlines(game))
+                prompt = day_prompt(day, game.total_days, ctx.last_modal, note, _deadlines(game), board_text(game))
                 response = await _run_day(agent, ctx, prompt)
 
                 note = (getattr(response, "text", "") or "").strip()
