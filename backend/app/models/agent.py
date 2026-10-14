@@ -1,7 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, JSON, Index, Enum as SAEnum
+from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, JSON, Index, Enum as SAEnum, text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -18,10 +18,19 @@ class AgentRunStatus(str, enum.Enum):
 
 ACTIVE_RUN_STATUSES = (AgentRunStatus.pending, AgentRunStatus.running)
 
+# Shared with the startup migration in main.py, which adds them to existing tables.
+AGENT_RUN_ACTIVE_INDEX = "uq_agent_runs_user_active"
+ACTIVE_RUN_WHERE = "status IN ('pending', 'running')"
+GAME_ACTION_SEQ_INDEX = "ix_game_actions_game_seq"
+
 
 class AgentRun(Base):
     """One AI-agent playthrough of a game. The provider API key is never stored."""
     __tablename__ = "agent_runs"
+    # At most one active (pending/running) run per user, enforced by the database.
+    __table_args__ = (
+        Index(AGENT_RUN_ACTIVE_INDEX, "user_id", unique=True, postgresql_where=text(ACTIVE_RUN_WHERE)),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
@@ -49,7 +58,7 @@ class GameAction(Base):
             | end_day | day_summary | run_event
     """
     __tablename__ = "game_actions"
-    __table_args__ = (Index("ix_game_actions_game_seq", "game_id", "seq"),)
+    __table_args__ = (Index(GAME_ACTION_SEQ_INDEX, "game_id", "seq", unique=True),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     game_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("games.id"))

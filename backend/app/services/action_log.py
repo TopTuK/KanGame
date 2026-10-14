@@ -11,10 +11,11 @@ import uuid
 from typing import Optional
 
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.cards import PULL_MOVES, WIP_GROUPS
-from app.models.agent import GameAction
+from app.models.agent import GameAction, GAME_ACTION_SEQ_INDEX
 from app.models.game import Game, Card
 from app.services import game_engine
 
@@ -24,6 +25,8 @@ ACTOR_SYSTEM = "system"
 
 _HIDDEN_COLUMNS = ("hidden", "removed")
 _DEPLOYED_COLUMNS = ("deployed", "exp_deployed")
+# Each collision round has one winner, so this covers up to 10 simultaneous writers.
+SEQ_INSERT_ATTEMPTS = 10
 
 
 def player_actor(game: Game) -> str:
@@ -116,25 +119,37 @@ async def record(
     run_id: Optional[uuid.UUID] = None,
     state: Optional[dict] = None,
 ) -> GameAction:
-    seq = (await db.execute(
-        select(func.coalesce(func.max(GameAction.seq), 0)).where(GameAction.game_id == game_id)
-    )).scalar_one() + 1
-    entry = GameAction(
-        id=uuid.uuid4(),
-        game_id=game_id,
-        run_id=run_id,
-        actor=actor,
-        seq=seq,
-        day=day,
-        action=action,
-        arguments=arguments or {},
-        result=result or {},
-        reason=reason,
-        state=state,
-    )
-    db.add(entry)
-    await db.commit()
-    return entry
+    # `seq` is max+1 per game, guarded by the unique (game_id, seq) index. A
+    # concurrent writer (e.g. a double-clicked action) can take the same value,
+    # so retry with a fresh max. Each attempt runs in a SAVEPOINT: a collision
+    # rolls back only this insert, never the caller's loaded game objects.
+    for attempt in range(SEQ_INSERT_ATTEMPTS):
+        seq = (await db.execute(
+            select(func.coalesce(func.max(GameAction.seq), 0)).where(GameAction.game_id == game_id)
+        )).scalar_one() + 1
+        entry = GameAction(
+            id=uuid.uuid4(),
+            game_id=game_id,
+            run_id=run_id,
+            actor=actor,
+            seq=seq,
+            day=day,
+            action=action,
+            arguments=arguments or {},
+            result=result or {},
+            reason=reason,
+            state=state,
+        )
+        try:
+            async with db.begin_nested():
+                db.add(entry)
+        except IntegrityError as exc:
+            if GAME_ACTION_SEQ_INDEX not in str(exc) or attempt == SEQ_INSERT_ATTEMPTS - 1:
+                raise
+            continue
+        await db.commit()
+        return entry
+    raise AssertionError("unreachable")
 
 
 async def record_day_start(db: AsyncSession, game: Game, run_id: Optional[uuid.UUID] = None) -> GameAction:

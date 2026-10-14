@@ -261,3 +261,53 @@ async def test_run_without_key_uses_server_key_only_for_default_provider(api_cli
 def test_openrouter_gets_attribution_headers():
     assert agent_runner._provider_headers("https://openrouter.ai/api/v1")["X-Title"] == "KanGame"
     assert agent_runner._provider_headers("https://api.openai.com/v1") is None
+
+
+# --- concurrency & cancellation --------------------------------------------
+
+async def test_concurrent_run_requests_start_only_one_run(api_client, db_session, user, monkeypatch):
+    import asyncio
+    started = []
+    monkeypatch.setattr(agent_runner, "start", lambda *args: started.append(args))
+    payload = {"name": "Bot", "base_url": "https://api.example.com/v1", "model": "m", "api_key": SECRET}
+
+    responses = await asyncio.gather(*(api_client.post("/api/agent/runs", json=payload) for _ in range(4)))
+
+    assert sorted(r.status_code for r in responses) == [201, 409, 409, 409]
+    assert len(started) == 1
+    user_id = user.id  # read before expiring: lazy loads can't run here
+    db_session.expire_all()
+    runs = (await db_session.execute(select(AgentRun).where(AgentRun.user_id == user_id))).scalars().all()
+    agent_games = (await db_session.execute(
+        select(Game.id).where(Game.user_id == user_id, Game.is_agent.is_(True))
+    )).scalars().all()
+    assert len(runs) == 1 and agent_games == [runs[0].game_id]  # losers' games were cleaned up
+
+
+async def test_database_rejects_second_active_run_for_user(db_session, user):
+    from sqlalchemy.exc import IntegrityError
+    await _new_run(db_session, user)
+    with pytest.raises(IntegrityError):
+        await _new_run(db_session, user)
+
+
+async def test_cancelled_task_is_recorded_as_failed_and_reraises(db_session, user, fake_agent):
+    import asyncio
+    game, run, ctx = await _new_run(db_session, user)
+    entered = asyncio.Event()
+
+    async def hang(tools, prompt):
+        entered.set()
+        await asyncio.Event().wait()
+
+    fake_agent(hang)
+    task = asyncio.create_task(agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake"))
+    await asyncio.wait_for(entered.wait(), 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    _, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.failed and r.finished_at
+    assert r.error == "interrupted: agent task was cancelled"
+    assert rows[-1].action == "run_event" and rows[-1].result["event"] == "failed"

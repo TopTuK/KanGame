@@ -190,7 +190,8 @@ async def _safety_net(ctx: RunContext, day: int) -> None:
 
 async def run_agent(ctx: RunContext, api_key: str, base_url: str, model: str) -> None:
     secret = api_key
-    status, error = AgentRunStatus.completed, None
+    # Pessimistic default: only a normal end of the day loop marks the run completed.
+    status, error = AgentRunStatus.failed, "aborted"
     llm_turns = in_tokens = out_tokens = 0
     start_day = 0
     try:
@@ -235,13 +236,23 @@ async def run_agent(ctx: RunContext, api_key: str, base_url: str, model: str) ->
                 after = await _load_game(ctx)
                 if after and after.status == GameStatus.active and after.current_day == day:
                     raise RuntimeError(f"day {day} could not be completed")
+        status, error = AgentRunStatus.completed, None
     except RunCancelled:
-        status = AgentRunStatus.cancelled
+        status, error = AgentRunStatus.cancelled, None
+    except asyncio.CancelledError:
+        # The task itself was cancelled (e.g. server shutdown). CancelledError is
+        # not an Exception, so record the outcome here, then re-raise so asyncio
+        # sees the cancellation; `finally` still finalizes the run row.
+        if ctx.cancel.is_set():
+            status, error = AgentRunStatus.cancelled, None
+        else:
+            status, error = AgentRunStatus.failed, "interrupted: agent task was cancelled"
+        raise
     except TimeoutError:
         status, error = AgentRunStatus.failed, f"timeout after {settings.AGENT_MAX_RUN_MINUTES} minutes"
     except Exception as exc:  # noqa: BLE001 — any failure ends the run
         if ctx.cancel.is_set():
-            status = AgentRunStatus.cancelled
+            status, error = AgentRunStatus.cancelled, None
             return
         logger.exception("Agent run %s failed", ctx.run_id)
         status, error = AgentRunStatus.failed, _redact(f"{type(exc).__name__}: {exc}", secret)[:2000]

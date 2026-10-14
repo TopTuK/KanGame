@@ -5,12 +5,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.agent import AgentRun, AgentRunStatus, GameAction, ACTIVE_RUN_STATUSES
+from app.models.agent import AgentRun, AgentRunStatus, GameAction, ACTIVE_RUN_STATUSES, AGENT_RUN_ACTIVE_INDEX
 from app.models.game import Game
 from app.models.user import User
 from app.schemas.agent import (
@@ -22,6 +23,7 @@ from app.services import game_engine, action_log, agent_runner
 router = APIRouter()
 
 DETAIL_ACTIONS = 50
+ACTIVE_RUN_CONFLICT = "You already have an agent run in progress"
 
 
 def _run_out(run: AgentRun, game: Optional[Game]) -> AgentRunOut:
@@ -90,16 +92,27 @@ async def create_run(
         select(AgentRun.id).where(AgentRun.user_id == current_user.id, AgentRun.status.in_(ACTIVE_RUN_STATUSES))
     )
     if active.first():
-        raise HTTPException(status_code=409, detail="You already have an agent run in progress")
+        raise HTTPException(status_code=409, detail=ACTIVE_RUN_CONFLICT)
 
     name = payload.name.strip()
     game = await game_engine.create_game(db, f"🤖 {name}", name, current_user.id, is_agent=True)
+    game_id = game.id
     run = AgentRun(
-        id=uuid.uuid4(), user_id=current_user.id, game_id=game.id,
+        id=uuid.uuid4(), user_id=current_user.id, game_id=game_id,
         name=name, model=model, base_url=base_url, status=AgentRunStatus.pending,
     )
     db.add(run)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # A concurrent request won the race for the user's single active run
+        # (partial unique index); drop the game created for this losing request.
+        await db.rollback()
+        db.expunge_all()
+        if AGENT_RUN_ACTIVE_INDEX not in str(exc):
+            raise
+        await game_engine.delete_games(db, [game_id])
+        raise HTTPException(status_code=409, detail=ACTIVE_RUN_CONFLICT)
     await action_log.record_day_start(db, game, run_id=run.id)
 
     agent_runner.start(run.id, game.id, current_user.id, api_key, base_url, model)

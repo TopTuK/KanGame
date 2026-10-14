@@ -115,3 +115,22 @@ async def test_games_list_flags_agent_games(api_client, db_session, user):
 
     res = await api_client.get("/api/games")
     assert sorted(g["is_agent"] for g in res.json()) == [False, True]
+
+
+async def test_concurrent_records_get_unique_sequential_seq(db_session, user):
+    import asyncio
+    from app.core.database import AsyncSessionLocal
+    from app.services import action_log
+
+    game = await ge.create_game(db_session, "G", "Alice", user.id)
+
+    async def write(i):
+        async with AsyncSessionLocal() as db:
+            await action_log.record(db, game_id, 9, "human", "get_game_state", result={"i": i})
+
+    game_id = game.id
+    await asyncio.gather(*(write(i) for i in range(8)))
+
+    rows = await _actions(db_session, game_id)
+    assert [r.seq for r in rows] == list(range(1, 9))
+    assert sorted(r.result["i"] for r in rows) == list(range(8))
