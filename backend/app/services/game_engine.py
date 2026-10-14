@@ -168,7 +168,7 @@ def can_pull_to(game: Game, wip_key: str) -> bool:
 
 async def create_game(
     db: AsyncSession, name: str, player_name: str, user_id: uuid.UUID,
-    total_days: int = 35, is_demo: bool = False,
+    total_days: int = 35, is_demo: bool = False, is_agent: bool = False,
 ) -> Game:
     game = Game(
         id=uuid.uuid4(),
@@ -179,6 +179,7 @@ async def create_game(
         current_day=9,
         total_days=total_days,
         is_demo=is_demo,
+        is_agent=is_agent,
         phase="planning",
         work_done=False,
         carlos_policy=False,
@@ -306,7 +307,11 @@ async def get_all_games(db: AsyncSession, user_id: uuid.UUID) -> list[Game]:
 async def get_top_leaderboard(db: AsyncSession, limit: int = 5) -> list[dict]:
     subq = (
         select(Game.user_id, func.max(Game.total_revenue).label("best_revenue"))
-        .where(Game.status == GameStatus.completed, Game.is_demo.is_(False))
+        .where(
+            Game.status == GameStatus.completed,
+            Game.is_demo.is_(False),
+            Game.is_agent.is_(False),
+        )
         .group_by(Game.user_id)
         .subquery()
     )

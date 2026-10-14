@@ -103,6 +103,7 @@ jobs:
             echo "AuthCallbackUrl=${{ secrets.AuthCallbackUrl }}"
             echo "BASE_URL=${{ secrets.BASE_URL }}"
             echo "SESSION_SECRET_KEY=${{ secrets.SESSION_SECRET_KEY }}"
+            echo "AGENT_DEFAULT_API_KEY=${{ secrets.AGENT_DEFAULT_API_KEY }}"
           } > ${{ env.ENV_FILE_PATH }}
           chmod 600 ${{ env.ENV_FILE_PATH }}
 

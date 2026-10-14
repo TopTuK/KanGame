@@ -12,8 +12,8 @@ from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.username import resolve_initial_username
 from app.models.user import User
-from app.services import game_engine
-from app.api.routes import games, auth, leaderboard, demo
+from app.services import game_engine, agent_runner
+from app.api.routes import games, auth, leaderboard, demo, agent
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ async def startup():
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS carlos_policy BOOLEAN DEFAULT FALSE",
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS lockdown BOOLEAN DEFAULT FALSE",
         "ALTER TABLE games ADD COLUMN IF NOT EXISTS is_demo BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE games ADD COLUMN IF NOT EXISTS is_agent BOOLEAN DEFAULT FALSE",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255)",
     ]
     async with engine.begin() as conn:
@@ -83,6 +84,9 @@ async def startup():
             session.add(User(sub=game_engine.DEMO_USER_SUB, name="Demo", username="Demo"))
             await session.commit()
 
+    async with AsyncSessionLocal() as session:
+        await agent_runner.fail_interrupted_runs(session)
+
     asyncio.create_task(_demo_cleanup_loop())
 
 
@@ -100,6 +104,7 @@ app.include_router(games.router, prefix="/api/games", tags=["games"])
 app.include_router(auth.router, tags=["auth"])
 app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["leaderboard"])
 app.include_router(demo.router, prefix="/api/demo", tags=["demo"])
+app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
 
 
 @app.get("/health")

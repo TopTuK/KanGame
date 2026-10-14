@@ -24,6 +24,9 @@ services:
       BASE_URL: ${BASE_URL:-http://localhost}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      AGENT_DEFAULT_BASE_URL: ${AGENT_DEFAULT_BASE_URL:-https://openrouter.ai/api/v1}
+      AGENT_DEFAULT_MODEL: ${AGENT_DEFAULT_MODEL:-openai/gpt-6-luna}
+      AGENT_DEFAULT_API_KEY: ${AGENT_DEFAULT_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy

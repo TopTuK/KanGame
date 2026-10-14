@@ -118,6 +118,42 @@ Visitors who aren't signed in can click **Try a demo instead** on the home page 
 - `get_top_leaderboard` filters out `is_demo` games, so demo scores never appear on `/leaderboard`.
 - A background task started at app startup purges demo games (and their cards/events/metrics) older than 24 hours once a day, so demo data never accumulates in the database.
 
+### 🤖 AI Agent Mode
+
+Signed-in users can open **🤖 Run AI agent** on the home page (`/agent`) and let an LLM play a full Day 9–35 game exactly like a human player. The agent is built with the [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) (`agent-framework-openai`, Chat Completions client), so any OpenAI-compatible endpoint works (OpenAI, OpenRouter, vLLM, Ollama, Azure `…/openai/v1`). The user supplies an agent name, base URL, model and API key.
+
+- **Same actions as a human.** The agent's function tools map 1:1 to the player's UI actions and call the same `game_engine` functions: `get_game_state` (look at the board), `pull_card`, `assign_worker`, `start_work`, `end_day`. Each mutating tool requires a one-sentence `reason`. Engine errors (e.g. `WIP limit reached for test`) are returned to the model so it can correct itself.
+- **Day loop.** `services/agent_runner.py` runs one asyncio background task per run. Each day is a fresh `agent.run(day_prompt)` whose prompt contains yesterday's end-of-day event (the same dialog a human reads), open deadlines, and the agent's own note from yesterday. If the model stops without starting work or ending the day, a **system safety net** does it and logs that it did, so every game finishes.
+- **Guardrails.** One active run per user, a per-day tool-call cap (`AGENT_DAY_TOOL_CALL_LIMIT`, default 40), a global timeout (`AGENT_MAX_RUN_MINUTES`, default 30), cancel at any time, and runs interrupted by a restart are marked `failed` at startup. `AGENT_ENABLED=false` turns the feature off.
+- **Default provider.** The form is pre-filled with [OpenRouter](https://openrouter.ai) (`AGENT_DEFAULT_BASE_URL=https://openrouter.ai/api/v1`) and OpenAI's fast, low-cost `openai/gpt-6-luna` (`AGENT_DEFAULT_MODEL`). If `AGENT_DEFAULT_API_KEY` is set in `.env` (an OpenRouter key from https://openrouter.ai/keys), users can leave the key field blank. The server key is only ever sent to the default base URL and is never returned by `GET /api/agent/config`. In production it comes from the `AGENT_DEFAULT_API_KEY` GitHub secret.
+- **API key handling.** The key is kept in memory only (request → background task → client), is never written to the database or logs, and is redacted from error messages.
+- **Games.** Agent games are owned by the user, appear in their games list with an **AI** badge, are excluded from the leaderboard (`is_agent`, like `is_demo`), and are read-only for humans (the game routes return 409).
+
+#### 📝 Action log (human and agent)
+
+Every player action — by a human through the game routes or by the agent through its tools — is written to the shared `game_actions` table in the same shape, so the two can be compared directly:
+
+| Column | Meaning |
+|---|---|
+| `actor` | `human`, `agent`, or `system` (the runner's safety net acting for the agent) |
+| `seq`, `day` | Order within the game, and the game day of the action |
+| `action` | `day_start` (board snapshot in `state`), `get_game_state`, `pull_card`, `assign_worker`, `start_work`, `end_day`, `day_summary` (the agent's daily note in `reason`), `run_event` |
+| `arguments` | Card keys / worker ids, never UUIDs: `{card_key, from_col}`, `{worker_id, worker_type, card_key, card_col}`, `{assignments, idle_workers}` |
+| `result` | `{ok, error?}` plus the outcome: destination column, assign toggle outcome, work-log dice rolls, end-of-day event and overdue cards |
+| `reason` | The agent's rationale for the action |
+
+Failed attempts are logged too (`result.ok = false`). Fetch a game's log with `GET /api/games/{id}/actions`, or download an agent run's log, with run metadata and daily metrics, from the agent page. Example comparison query:
+
+```sql
+SELECT g.is_agent, a.day,
+       count(*) FILTER (WHERE a.action = 'pull_card' AND (a.result->>'ok')::bool)  AS pulls,
+       count(*) FILTER (WHERE a.action = 'pull_card' AND NOT (a.result->>'ok')::bool) AS rejected_pulls,
+       avg(json_array_length(a.arguments->'idle_workers')) FILTER (WHERE a.action = 'start_work') AS idle_workers
+FROM game_actions a JOIN games g ON g.id = a.game_id
+WHERE a.actor IN ('human', 'agent')
+GROUP BY g.is_agent, a.day ORDER BY a.day, g.is_agent;
+```
+
 ### 🗄️ Data Layer
 
 PostgreSQL stores the full game snapshot:
@@ -502,6 +538,13 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 | `POST` | `/api/games/{id}/pull-card` | Pull one card forward by exactly one column (Backlog→Ready, Ready→Analysis, Analysis Done→Development, Dev Done→Test), subject to the destination's WIP limit |
 | `POST` | `/api/games/{id}/start-work` | Resolve assigned worker output for the day and return the work log |
 | `POST` | `/api/games/{id}/end-day` | Apply day-end events, metrics, overdue checks, and advance the day |
+| `GET` | `/api/games/{id}/actions` | Player action log for the game (human or agent), oldest first; `?after_seq=` for incremental reads |
+| `POST` | `/api/agent/runs` | Start an AI agent run (`name`, `base_url`, `model`, `api_key`); 409 if one is already active |
+| `GET` | `/api/agent/runs` | List the current user's agent runs |
+| `GET` | `/api/agent/runs/{id}` | Run status and latest actions; `?after_seq=` returns only newer actions (polling) |
+| `GET` | `/api/agent/runs/{id}/actions` | Page back through older actions (`?before_seq=&limit=`) |
+| `GET` | `/api/agent/runs/{id}/log` | Download the full run log as JSON |
+| `POST` | `/api/agent/runs/{id}/cancel` | Stop an active run at the next tool call |
 | `POST` | `/api/demo` | **Public, no auth required.** Create a new demo game (Day 9–15, excluded from the leaderboard) |
 | `POST` | `/api/demo/{id}/assign-worker` | Same as the authenticated route, scoped to the demo game |
 | `POST` | `/api/demo/{id}/pull-card` | Same as the authenticated route, scoped to the demo game |
