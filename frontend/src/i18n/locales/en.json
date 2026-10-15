@@ -35,7 +35,11 @@
     "communityLink": "PM Russia Club",
     "communityLinkDesc": "A closed community for project, program, and portfolio managers — forums, expert AMAs, meetups, and mentoring, built around real peer discussion rather than social media.",
     "leaderboardLink": "Leaderboard",
-    "leaderboardLinkDesc": "See the top 5 players with the highest profit"
+    "leaderboardLinkDesc": "See the top 5 players with the highest profit",
+    "rulesLink": "Rules of the Game",
+    "rulesLinkDesc": "What to do each day, card types, the team's capacity and how revenue is earned",
+    "agentRunning": "🤖 Agent “{name}” is playing: day {current}/{total}",
+    "agentRunningOpen": "Open →"
   },
   "leaderboard": {
     "title": "Leaderboard",
@@ -235,6 +239,7 @@
     "startWork": "Start Work applies each worker's role-based productivity range and advances completed stages",
     "endDay": "End Day applies events, checks deadlines, and advances the calendar",
     "f1deadline": "Remember: F1 must be deployed by end of Day 15!",
+    "fullRules": "Read the full rules →",
     "gotIt": "Let's play!"
   },
   "workLog": {
@@ -298,6 +303,151 @@
   },
   "cards": {},
   "events": {},
+  "rules": {
+    "title": "Rules of the Game",
+    "subtitle": "Everything you need to play KanGame well: the board, what to do each day, the cards, the team and how revenue is earned.",
+    "back": "← Home",
+    "loading": "Loading rules…",
+    "error": "Could not load the game numbers. The text below still applies.",
+    "contents": "Contents",
+    "goal": {
+      "title": "1. Goal",
+      "p1": "You run a software team's Kanban board from day {start} to day {end}. Each day you decide which work to pull forward and who works on what. When the last day ends, your total revenue is your score.",
+      "p2": "Money comes only from cards that reach Deployed. A card stuck anywhere else, however far along, earns nothing. Finishing work beats starting new work."
+    },
+    "board": {
+      "title": "2. The board",
+      "p1": "Cards move left to right through the standard lane:",
+      "p2": "Analysis, Development and Test are working columns: only there can people work on a card. Each has a matching Done column (Analysis Done, Dev Done, Test Done) where a finished card waits until you pull it on.",
+      "p3": "A card moves in only two ways. When its remaining points for the current stage reach 0 during Start Work, it moves to that stage's Done column automatically. Every other move is a pull that you make yourself, one column at a time. Nobody moves cards for you.",
+      "p4": "Urgent expedite cards get their own lane (Exp. Backlog … Exp. Deployed). It appears when a day event announces such a card, and works the same way."
+    },
+    "turn": {
+      "title": "3. Your day, step by step",
+      "intro": "Every day follows the same routine. Pulls and assignments are only possible before Start Work; after it the board is frozen until the next day.",
+      "s1t": "Read the event",
+      "s1": "When a day ends, a dialog shows what happened: someone falls ill or comes back, a defect blocks a card, a WIP limit changes, an urgent request arrives. Plan the new day around it.",
+      "s2t": "Deploy finished cards",
+      "s2": "Drag every card in Test Done to Deployed (and Exp. Test Done to Exp. Deployed). This has no WIP limit. Cards deployed before Start Work already earn money today.",
+      "s3t": "Pull from right to left",
+      "s3": "Drag cards forward one column, starting at the right: Dev Done → Test, then Analysis Done → Development, then Ready → Analysis. Each pull frees a slot in the stage the card leaves, which makes the next pull to the left possible.",
+      "s4t": "Refill Ready",
+      "s4": "Click ↑ Pull to Ready on a Backlog card (or drag it) to commit to it. Choose by value per day, size and deadlines. Committing early to a fixed-date card protects its deadline.",
+      "s5t": "Assign the team",
+      "s5": "Drag a worker chip onto a card in Analysis, Development or Test, or click one or more workers and then click the card. Several people may work on one card; their points add up. Click an assigned badge to remove it. Every idle worker is lost capacity.",
+      "s6t": "Start Work",
+      "s6": "Press ▶ Start Work. Every assigned worker rolls their points for the card's stage, finished stages move to their Done column, and daily revenue from deployed cards is added. Assignments are cleared afterwards.",
+      "s7t": "Review the work log",
+      "s7": "The work log shows each worker's roll and which cards advanced or were deployed. Use it to see where work piles up.",
+      "s8t": "End the day",
+      "s8": "Press End Day ✓. The day's event is applied, overdue deadline cards are removed (with a fine where one applies), metrics are recorded and the calendar moves on."
+    },
+    "wip": {
+      "title": "4. WIP limits",
+      "p1": "Each stage limits how many cards it may hold. A stage counts its working and Done columns together, so a finished card waiting in Analysis Done still takes a slot in Analysis.",
+      "p2": "A pull into a full stage is rejected. To make room you must first pull a card out of that stage's Done column into the next stage. That is why you always pull from right to left.",
+      "p3": "Day events can change limits during the game (for example, Ready drops to 3). The header always shows current usage.",
+      "stage": "Stage",
+      "limit": "Starting limit",
+      "counts": "Counts cards in"
+    },
+    "cards": {
+      "title": "5. Card types",
+      "standardName": "Standard (S, blue)",
+      "standard": "A regular feature. Once deployed it earns its value every day until the game ends, counted at each Start Work. The earlier you deploy it, the more days it pays.",
+      "fixedName": "Fixed date (F, yellow)",
+      "fixed": "Earns nothing per day but has a deadline (end of its due day). A positive value is a one-off bonus if deployed on time; nothing is paid if it is late. A negative value is a fine charged if the card is not deployed on time.",
+      "expediteName": "Expedite (E, red)",
+      "expedite": "An urgent request announced by a day event. It appears in the expedite lane with a deadline and a large one-off value: a payment if delivered on time, or a fine if it is not. Delivering on time never costs money. The expedite Ready column holds one card.",
+      "intangibleName": "Intangible (I, gray)",
+      "intangible": "Technical work (refactoring, CI/CD, tests). It earns no money, but once deployed every future work roll of one role gets +1 for the rest of the game. Worth it early, rarely late.",
+      "overdue": "Overdue rule: a fixed-date or expedite card still on the board (Ready or further, or anywhere in the expedite lane) at the end of its due day is removed. If its value is negative, the fine is charged. Fixed-date cards still in the Backlog are not removed."
+    },
+    "catalog": {
+      "title": "6. Card catalog",
+      "intro": "Every card's work estimate in points per stage (Analysis / Development / Test) and its value. Cards that start on the board are already partly done. Expedite cards are revealed during the game.",
+      "all": "All",
+      "key": "Card",
+      "type": "Type",
+      "value": "Value, ₽",
+      "analysis": "A",
+      "development": "D",
+      "test": "T",
+      "start": "Starts in",
+      "terms": "Deadline / effect",
+      "perDay": "/day",
+      "dueDay": "due day {day}",
+      "buff": "+1 to every {role} roll",
+      "types": {
+        "standard": "Standard",
+        "fixed_date": "Fixed date",
+        "intangible": "Intangible"
+      }
+    },
+    "team": {
+      "title": "7. The team and its capacity",
+      "p1": "Three roles share a roster of 12 workers. The game starts with these people active; the others join or leave through day events (hiring, illness, vacation, conference, resignation, restructuring).",
+      "role": "Role",
+      "workers": "Workers",
+      "activeAtStart": "Active at start",
+      "p2": "During Start Work each assigned worker rolls a random whole number of points in their range for the card's current stage. Anyone may work in any stage, but specialists are much faster in their own:",
+      "stage": "Worker / stage",
+      "avg": "avg {avg}",
+      "capacity": "Expected daily capacity of the starting team, with everyone in their own stage: Analysis ≈ {a}, Development ≈ {d}, Test ≈ {t} points. Test has the most people, so the flow is usually limited by Analysis and Development.",
+      "estimate": "To estimate how long a stage will take: points left ÷ the sum of the assigned workers' averages. A card with 9 test points left needs about two testers to finish in one day.",
+      "rules": "Points beyond what a stage needs are lost: they don't carry over to another card. Workers who are sick, on vacation or not yet hired cannot be assigned.",
+      "blockers": "Blockers: some events block a card. Each worker assigned to a blocked card rolls 1d6 against the blocker instead of working; once it is cleared, leftover points go into the card. Anyone can help clear a blocker.",
+      "buffs": "Buffs: each deployed intangible card adds +1 to every future roll of one role."
+    },
+    "events": {
+      "title": "8. Day events",
+      "p1": "Every day ends with a scripted event, the same in every game. You don't know them in advance, but they come in a few kinds:",
+      "people": "Team changes: people get sick, go on vacation or to a conference, quit, are hired or change roles.",
+      "blockers": "Blockers: a defect or incident blocks the first card in Test or Development.",
+      "wip": "Policy changes: WIP limits change, or new management policies are announced.",
+      "expedite": "Urgent requests: expedite cards with tight deadlines and large values."
+    },
+    "scoring": {
+      "title": "9. Final rank",
+      "p1": "After day {end} your total revenue decides your rank:",
+      "from": "from {amount}",
+      "below": "below {amount}"
+    },
+    "tips": {
+      "title": "10. Tips",
+      "t1": "Stop starting, start finishing: deploy first, then pull right to left.",
+      "t2": "Swarm: put two or three people on one card so it finishes this stage today, instead of one person per card.",
+      "t3": "Keep everyone busy: send a specialist to help the nearest stage downstream when their own stage is empty.",
+      "t4": "Watch the deadlines: pull fixed-date and expedite cards early enough that they can make it through every stage.",
+      "t5": "Use the WIP limits: a full Done column is a signal to pull downstream, not a reason to wait.",
+      "t6": "Invest early: intangible cards pay off only if many days remain to use the buff.",
+      "t7": "Check 📈 Analytics: the cumulative flow diagram shows where work piles up."
+    },
+    "agentNote": "The AI agent plays by exactly these rules, with the same actions as you.",
+    "roles": {
+      "analyst": "Analyst",
+      "developer": "Developer",
+      "tester": "Tester"
+    },
+    "stages": {
+      "analysis": "Analysis",
+      "development": "Development",
+      "test": "Test",
+      "ready": "Ready",
+      "expedite": "Expedite (Exp. Ready)"
+    },
+    "columns": {
+      "backlog": "Backlog",
+      "ready": "Ready",
+      "analysis": "Analysis",
+      "analysis_done": "Analysis Done",
+      "development": "Development",
+      "dev_done": "Dev Done",
+      "test": "Test",
+      "test_done": "Test Done",
+      "deployed": "Deployed"
+    }
+  },
   "agent": {
     "title": "AI Agent Simulation",
     "subtitle": "An LLM agent plays the simulation exactly like a player: it reads the board, pulls cards, assigns people, starts work and ends days. Every action and its reason is logged.",
@@ -310,8 +460,8 @@
     "apiKey": "API key",
     "apiKeyHint": "Used only for this run, kept in server memory and never stored.",
     "apiKeyServerPlaceholder": "Optional — server key will be used",
-    "apiKeyServerHint": "Leave blank to use the server's OpenRouter key. Your own key is used only for this run and never stored.",
-    "resetDefaults": "Use default provider (OpenRouter · {model})",
+    "apiKeyServerHint": "Leave blank to use the server's RouterAI key. Your own key is used only for this run and never stored.",
+    "resetDefaults": "Use default provider (RouterAI · {model})",
     "start": "Start agent",
     "starting": "Starting…",
     "activeRunExists": "An agent run is already in progress.",
@@ -331,6 +481,19 @@
     "day": "Day {day}",
     "dayLabel": "Day",
     "dayNote": "Agent's note",
+    "rules": "📜 Rules",
+    "backgroundNotice": "The agent runs on the server. You can close this page and come back any time; the game and its log are saved.",
+    "runEvents": {
+      "started": "started",
+      "completed": "completed",
+      "failed": "failed",
+      "cancelled": "cancelled",
+      "llm_retry": "model did not respond ({error}), retry {attempt}/{max} in {delay}s",
+      "llm_error_after_day_end": "model connection lost after the day ended ({error}); continuing",
+      "context_summarized": "memory condensed: days {days} summarized, ~{before} → ~{after} tokens",
+      "context_summarized_fallback": "memory condensed from the daily journal (model summary failed): days {days}, ~{before} → ~{after} tokens"
+    },
+    "contextTokens": "context ~{tokens} tokens",
     "actors": {
       "agent": "agent",
       "system": "system",

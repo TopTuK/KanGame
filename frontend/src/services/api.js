@@ -47,4 +47,8 @@ export const leaderboardApi = {
   top: () => api.get('/leaderboard'),
 }
 
+export const rulesApi = {
+  get: () => api.get('/rules'),
+}
+
 export default api

@@ -119,15 +119,24 @@ def test_intangible_card_deployment_grants_a_permanent_buff(make_game, make_card
     assert log == [{"type": "buff", "card_key": card.card_key, "buff": "developer"}]
 
 
-def test_expedite_card_with_negative_value_is_always_penalized_on_deploy(make_game, make_card):
-    # E2/E3-style cards: negative value means deploying them costs money
-    # regardless of whether they beat their due day.
+def test_expedite_card_with_negative_value_deployed_on_time_costs_nothing(make_game, make_card):
+    # E2/E3-style cards: the negative value is a fine for missing the deadline,
+    # so delivering on time avoids it.
     game = make_game(current_day=10)
     card = make_card(card_type="expedite", due_day=25, deployed_day=10, val=-175000)
     log = []
     ge._apply_deploy_bonuses(game, card, log)
+    assert game.total_revenue == 0
+    assert log == []
+
+
+def test_expedite_card_with_negative_value_deployed_late_is_penalized(make_game, make_card):
+    game = make_game(current_day=26)
+    card = make_card(card_type="expedite", due_day=25, deployed_day=26, val=-175000)
+    log = []
+    ge._apply_deploy_bonuses(game, card, log)
     assert game.total_revenue == -175000
-    assert log[0]["type"] == "penalty"
+    assert log == [{"type": "penalty", "card_key": card.card_key, "amount": -175000}]
 
 
 def test_expedite_card_with_positive_value_earns_bonus_only_if_on_time(make_game, make_card):

@@ -9,6 +9,8 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
+from agent_framework import Message
+
 from app.models.agent import AgentRun, AgentRunStatus, GameAction
 from app.models.game import Game, GameStatus
 from app.services import agent_runner
@@ -57,18 +59,27 @@ async def only_look(tools, prompt):
 
 
 class FakeAgent:
+    """Receives the whole conversation like the real Agent; the script sees today's prompt."""
+
     def __init__(self, tools, script, on_run=None):
         self.tools = {t.name: t.func for t in tools}
         self.script = script
         self.on_run = on_run
         self.prompts: list[str] = []
+        self.conversations: list[list] = []
 
-    async def run(self, prompt):
+    async def run(self, messages):
+        prompt = messages[-1].text
         self.prompts.append(prompt)
+        self.conversations.append(list(messages))
         if self.on_run:
             self.on_run(len(self.prompts))
         text = await self.script(self.tools, prompt)
-        return SimpleNamespace(text=text, usage_details={"input_token_count": 100, "output_token_count": 20})
+        return SimpleNamespace(
+            text=text,
+            usage_details={"input_token_count": 100, "output_token_count": 20},
+            messages=[Message("assistant", [text])],
+        )
 
 
 @pytest.fixture
@@ -243,8 +254,8 @@ async def test_config_exposes_defaults_but_never_the_server_key(api_client, monk
     res = await api_client.get("/api/agent/config")
     assert res.json() == {
         "enabled": True,
-        "default_base_url": "https://openrouter.ai/api/v1",
-        "default_model": "openai/gpt-6-luna",
+        "default_base_url": "https://routerai.ru/api/v1",
+        "default_model": "openai/gpt-4.1-nano",
         "has_server_key": True,
     }
     assert SECRET not in res.text
@@ -266,8 +277,8 @@ async def test_run_without_key_uses_server_key_only_for_default_provider(api_cli
     res = await api_client.post("/api/agent/runs", json={"name": "Bot"})
     assert res.status_code == 201, res.text
     body = res.json()
-    assert body["base_url"] == "https://openrouter.ai/api/v1" and body["model"] == "openai/gpt-6-luna"
-    assert started[0][3:] == (SECRET, "https://openrouter.ai/api/v1", "openai/gpt-6-luna")
+    assert body["base_url"] == "https://routerai.ru/api/v1" and body["model"] == "openai/gpt-4.1-nano"
+    assert started[0][3:] == (SECRET, "https://routerai.ru/api/v1", "openai/gpt-4.1-nano")
     assert SECRET not in res.text
 
 
@@ -324,3 +335,222 @@ async def test_cancelled_task_is_recorded_as_failed_and_reraises(db_session, use
     assert r.status == AgentRunStatus.failed and r.finished_at
     assert r.error == "interrupted: agent task was cancelled"
     assert rows[-1].action == "run_event" and rows[-1].result["event"] == "failed"
+
+
+# --- timeouts, retries and memory ------------------------------------------------
+
+class APITimeoutError(Exception):
+    """Same class name as openai's, which is what the runner classifies as transient."""
+
+
+@pytest.fixture
+def no_backoff(monkeypatch):
+    monkeypatch.setattr(agent_runner, "_retry_delay", lambda exc, attempt: 0)
+
+
+def _events(rows, name):
+    return [x for x in rows if x.action == "run_event" and x.result.get("event") == name]
+
+
+async def test_transient_failure_retries_with_a_fresh_board(db_session, user, fake_agent, no_backoff):
+    game, run, ctx = await _new_run(db_session, user, total_days=9)
+    calls = {"n": 0}
+
+    async def flaky(tools, prompt):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            await tools["pull_card"](card_key="S8", reason="Free capacity in development")
+            raise APITimeoutError("model did not answer")
+        return await play_day(tools, prompt)
+
+    holder = fake_agent(flaky)
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    g, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.completed and g.status == GameStatus.completed
+    retries = _events(rows, "llm_retry")
+    assert len(retries) == 1 and retries[0].result["error"] == "APITimeoutError"
+    first, second = holder["agent"].prompts
+    assert not first.startswith(agent_runner.RETRY_NOTE)
+    assert second.startswith(agent_runner.RETRY_NOTE)
+    # The retry sees the pull the interrupted attempt already made.
+    assert "S8: analysis_done -> development" in first
+    assert "S8: analysis_done -> development" not in second
+
+
+async def test_hanging_model_hits_day_timeout_then_retries(db_session, user, fake_agent, no_backoff, monkeypatch):
+    import asyncio
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AGENT_DAY_TIMEOUT_SECONDS", 2)  # ample for a normal simulated day
+    game, run, ctx = await _new_run(db_session, user, total_days=9)
+    calls = {"n": 0}
+
+    async def hang_once(tools, prompt):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            await asyncio.Event().wait()
+        return await play_day(tools, prompt)
+
+    fake_agent(hang_once)
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    _, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.completed
+    retries = _events(rows, "llm_retry")
+    assert retries and retries[0].result["error"] == "TimeoutError" and retries[0].day == 9
+
+
+async def test_run_fails_when_retries_are_exhausted(db_session, user, fake_agent, no_backoff, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AGENT_LLM_RETRIES", 2)
+    game, run, ctx = await _new_run(db_session, user)
+
+    async def down(tools, prompt):
+        raise APITimeoutError("still down")
+
+    holder = fake_agent(down)
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    _, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.failed and "APITimeoutError" in r.error
+    assert [x.result["attempt"] for x in _events(rows, "llm_retry")] == [1, 2]
+    assert len(holder["agent"].prompts) == 3
+
+
+async def test_permanent_error_is_not_retried(db_session, user, fake_agent, no_backoff):
+    game, run, ctx = await _new_run(db_session, user)
+
+    class AuthenticationError(Exception):
+        pass
+
+    async def bad_key(tools, prompt):
+        raise AuthenticationError("invalid key")
+
+    fake_agent(bad_key)
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    _, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.failed and not _events(rows, "llm_retry")
+
+
+async def test_error_after_end_day_does_not_fail_the_run(db_session, user, fake_agent, no_backoff):
+    game, run, ctx = await _new_run(db_session, user, total_days=10)
+
+    async def play_then_drop(tools, prompt):
+        await play_day(tools, prompt)
+        raise APITimeoutError("connection dropped while writing the note")
+
+    holder = fake_agent(play_then_drop)
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    g, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.completed and g.status == GameStatus.completed
+    assert len(_events(rows, "llm_error_after_day_end")) == 2
+    assert len(holder["agent"].prompts) == 2  # no day was replayed
+
+
+def test_retry_delay_backs_off_and_honours_retry_after():
+    class RateLimitError(Exception):
+        def __init__(self, retry_after):
+            super().__init__("slow down")
+            self.response = SimpleNamespace(headers={"retry-after": retry_after})
+
+    assert agent_runner._retry_delay(RateLimitError("7"), 0) == 7
+    first = agent_runner._retry_delay(APITimeoutError(), 0)
+    third = agent_runner._retry_delay(APITimeoutError(), 2)
+    assert 2 <= first <= 4 and 9 <= third <= 15
+    assert agent_runner._retry_delay(APITimeoutError(), 10) <= agent_runner.RETRY_MAX_DELAY * 1.2
+
+
+def test_transient_classification():
+    class InternalServerError(Exception):
+        pass
+
+    class Wrapped(Exception):
+        pass
+
+    class BadRequestError(Exception):
+        pass
+
+    def chained(inner):
+        try:
+            raise inner
+        except Exception as exc:
+            try:
+                raise Wrapped("framework wrapper") from exc
+            except Wrapped as wrapped:
+                return wrapped
+
+    assert agent_runner._is_transient(chained(InternalServerError()))
+    assert agent_runner._is_transient(chained(TimeoutError()))
+    assert not agent_runner._is_transient(chained(BadRequestError()))
+    assert not agent_runner._is_transient(ValueError("bug"))
+    status_503 = Exception("unavailable")
+    status_503.status_code = 503
+    assert agent_runner._is_transient(status_503)
+
+
+async def test_conversation_is_kept_across_days(db_session, user, fake_agent):
+    game, run, ctx = await _new_run(db_session, user, total_days=11)
+    holder = fake_agent(play_day)
+
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    # Each day adds its prompt and the agent's reply to the conversation.
+    assert [len(c) for c in holder["agent"].conversations] == [1, 3, 5]
+    day3 = holder["agent"].conversations[2]
+    assert day3[0].text.startswith("Day 9 of 11")
+    assert day3[1].role == "assistant" and day3[1].text.startswith("Played: Day 9 of 11")
+    assert day3[2].text.startswith("Day 10 of 11")
+
+
+async def test_context_is_summarized_when_it_grows(db_session, user, fake_agent, monkeypatch):
+    from app.core.config import settings
+    # A tiny window (instructions alone are ~4.3k tokens) so a few days of boards cross the threshold.
+    monkeypatch.setattr(settings, "AGENT_CONTEXT_WINDOW_TOKENS", 12_000)
+    monkeypatch.setattr(settings, "AGENT_CONTEXT_SUMMARY_THRESHOLD", 0.5)
+    monkeypatch.setattr(settings, "AGENT_CONTEXT_KEEP_RECENT_DAYS", 1)
+    seen = []
+
+    async def summarize(agent, instructions, transcript):
+        seen.append(transcript)
+        return "SUMMARY: deployed S1-S3, keep testers on test."
+
+    monkeypatch.setattr(agent_runner, "summarize_with_llm", summarize)
+    game, run, ctx = await _new_run(db_session, user, total_days=14)
+    holder = fake_agent(play_day)
+
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    _, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.completed
+    events = _events(rows, "context_summarized")
+    assert events and not events[0].result["fallback"]
+    assert events[0].result["tokens_after"] < events[0].result["tokens_before"]
+    assert "=== Day 9 ===" in seen[0] and "Current board" not in seen[0]
+    last = holder["agent"].conversations[-1]
+    assert last[0].text.startswith("Game memory (your own summary of days 9-")
+    assert "SUMMARY: deployed S1-S3" in last[0].text
+
+
+async def test_summarizer_failure_falls_back_to_the_journal(db_session, user, fake_agent, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "AGENT_CONTEXT_WINDOW_TOKENS", 12_000)
+    monkeypatch.setattr(settings, "AGENT_CONTEXT_SUMMARY_THRESHOLD", 0.5)
+    monkeypatch.setattr(settings, "AGENT_CONTEXT_KEEP_RECENT_DAYS", 1)
+
+    async def broken(agent, instructions, transcript):
+        raise APITimeoutError("summarizer down")
+
+    monkeypatch.setattr(agent_runner, "summarize_with_llm", broken)
+    game, run, ctx = await _new_run(db_session, user, total_days=14)
+    holder = fake_agent(play_day)
+
+    await agent_runner.run_agent(ctx, api_key=SECRET, base_url="http://fake", model="fake")
+
+    _, r, rows = await _reload(db_session, game, run)
+    assert r.status == AgentRunStatus.completed
+    events = _events(rows, "context_summarized")
+    assert events and events[0].result["fallback"] is True
+    memory_text = holder["agent"].conversations[-1][0].text
+    assert "Day 9: event 'First Day Complete'." in memory_text and "Total revenue" in memory_text

@@ -32,11 +32,17 @@ class RunContext:
     total_calls: int = 0
     day_ended: bool = False
     last_modal: Optional[dict] = None
+    # Bumped by every successful change to the board; lets get_game_state answer
+    # "unchanged" instead of re-sending the whole board into the context.
+    board_version: int = 0
+    seen_version: Optional[int] = None
 
     def begin_day(self, day: int) -> None:
         self.day = day
         self.day_calls = 0
         self.day_ended = False
+        self.board_version = 0
+        self.seen_version = None
 
 
 def _dump(data) -> str:
@@ -75,6 +81,7 @@ def make_tools(ctx: RunContext) -> list[FunctionTool]:
         pulls that are possible right now."""
         if stop := _gate(ctx, mutating=False):
             return stop
+        unchanged = ctx.seen_version == ctx.board_version
         async with AsyncSessionLocal() as db:
             game = await game_engine.get_game(db, ctx.game_id, ctx.user_id)
             if not game:
@@ -82,8 +89,12 @@ def make_tools(ctx: RunContext) -> list[FunctionTool]:
             board = board_text(game)
             await action_log.record(
                 db, ctx.game_id, game.current_day, ACTOR_AGENT, "get_game_state",
-                result={"ok": True}, run_id=ctx.run_id,
+                result={"ok": True, "unchanged": unchanged}, run_id=ctx.run_id,
             )
+        if unchanged:
+            return ("Board unchanged since your last get_game_state call (no successful pull, assignment or "
+                    "start_work since). Act on that board instead of looking again.")
+        ctx.seen_version = ctx.board_version
         return board
 
     async def pull_card(
@@ -102,6 +113,7 @@ def make_tools(ctx: RunContext) -> list[FunctionTool]:
             )
         if error:
             return f"ERROR: {error}"
+        ctx.board_version += 1
         return f"OK: {card_key.upper()} moved to {result.get('to_col')}."
 
     async def assign_worker(
@@ -122,6 +134,7 @@ def make_tools(ctx: RunContext) -> list[FunctionTool]:
             )
         if error:
             return f"ERROR: {error}"
+        ctx.board_version += 1
         outcome = result.get("outcome")
         if outcome == "unassigned":
             return f"OK: {worker_id} unassigned from {card_key.upper()} (it was already assigned there)."
@@ -143,6 +156,7 @@ def make_tools(ctx: RunContext) -> list[FunctionTool]:
             return "ERROR: game not found"
         if error:
             return f"ERROR: {error}"
+        ctx.board_version += 1
         return _dump({
             "work_log": log,
             "daily_revenue": result.get("daily_revenue"),
@@ -164,6 +178,7 @@ def make_tools(ctx: RunContext) -> list[FunctionTool]:
         if error:
             return f"ERROR: {error}"
         ctx.day_ended = True
+        ctx.board_version += 1
         ctx.last_modal = modal
         return _dump({
             "event": modal.get("title"),
