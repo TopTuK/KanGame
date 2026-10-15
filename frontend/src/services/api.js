@@ -45,6 +45,7 @@ export const agentApi = {
 
 export const leaderboardApi = {
   top: () => api.get('/leaderboard'),
+  agents: () => api.get('/leaderboard/agents'),
 }
 
 export const rulesApi = {
