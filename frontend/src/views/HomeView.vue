@@ -208,7 +208,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { agentApi, gamesApi } from '../services/api.js'
@@ -253,12 +253,42 @@ async function loadGames() {
 }
 
 // Agent runs keep playing on the server after their page is closed; point back to one.
+const ACTIVE_RUN_POLL_MS = 15000
+let activeRunTimer = null
+let unmounted = false
+
 async function loadActiveRun() {
   try {
     const runs = (await agentApi.listRuns()).data
+    if (unmounted) return
     activeRun.value = runs.find((r) => r.status === 'pending' || r.status === 'running') || null
   } catch {}
+  scheduleActiveRunPoll()
 }
+
+function stopActiveRunPoll() {
+  if (activeRunTimer) clearTimeout(activeRunTimer)
+  activeRunTimer = null
+}
+
+// Keep the banner's day count current while Home is visible and a run is playing.
+function scheduleActiveRunPoll() {
+  stopActiveRunPoll()
+  if (unmounted || document.hidden || !activeRun.value) return
+  activeRunTimer = setTimeout(loadActiveRun, ACTIVE_RUN_POLL_MS)
+}
+
+function onVisibilityChange() {
+  if (document.hidden) stopActiveRunPoll()
+  else if (authStore.isAuthenticated) loadActiveRun()
+}
+
+document.addEventListener('visibilitychange', onVisibilityChange)
+onBeforeUnmount(() => {
+  unmounted = true
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  stopActiveRunPoll()
+})
 
 function startEditUsername() {
   usernameDraft.value = authStore.user?.username || ''
