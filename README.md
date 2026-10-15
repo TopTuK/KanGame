@@ -25,6 +25,8 @@ An interactive web simulation of Kanban methodology, inspired by [getKanban®](h
 - 💾 **Persistent, per-user games** — Save and resume your own games via PostgreSQL; each player only sees their own
 - 🎬 **Demo mode** — Try a shortened Day 9–15 simulation from the home page with no account needed; not saved, not resumable, and excluded from the leaderboard (see [🎬 Demo Mode](#-demo-mode))
 - 🏆 **Public leaderboard** — Top 5 users by best completed-game revenue, viewable at `/leaderboard` without signing in; demo games never count
+- 📜 **Rules page** — Public `/rules` page: step-by-step daily routine, card types, the full card catalog with estimates, team capacity and scoring, with numbers served live from the engine (see [📜 Rules of the Game](#-rules-of-the-game))
+- 🤖 **AI agent player** — Let an LLM play a full game in the background with the same actions as a human, every action logged with its reason (see [🤖 AI Agent Mode](#-ai-agent-mode))
 - 🌐 **Localization** — Russian and English UI; Russian is the default; switch language from the header selector (preference saved in the browser)
 
 ---
@@ -55,7 +57,7 @@ The system follows a **classic three-tier layout** with a clear split between pr
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Views** (`HomeView`, `GameView`, `DemoGameView`, `LeaderboardView`) | Page-level layout and routing entry points — `LeaderboardView` and `DemoGameView` are reachable without signing in |
+| **Views** (`HomeView`, `GameView`, `DemoGameView`, `LeaderboardView`, `RulesView`, `AgentView`) | Page-level layout and routing entry points — `LeaderboardView`, `RulesView` and `DemoGameView` are reachable without signing in |
 | **Components** | UI building blocks — board, columns, cards, modals, panels |
 | **Pinia store** (`gameStore`) | Client state, derived WIP counts, worker selection, API orchestration |
 | **i18n** (`i18n/`, `useGameContent`) | UI strings and translated card/event text keyed by `card_key` / `event_key` |
@@ -80,6 +82,7 @@ The UI never encodes game rules. It renders server state and sends player action
 | **API routes** (`api/routes/games.py`) | HTTP endpoints, validation, error handling — every route requires a signed-in user and is scoped to their own games |
 | **Auth routes** (`api/routes/auth.py`) | OIDC login redirect, provider callback, current-user lookup, logout |
 | **Leaderboard route** (`api/routes/leaderboard.py`) | Public, unauthenticated endpoint — no route dependency requires a session |
+| **Rules route** (`api/routes/rules.py`) | Public `GET /api/rules`: productivity ranges, WIP limits, roster, card catalog and rank thresholds, built from the engine constants by `services/rules.py` |
 | **Demo route** (`api/routes/demo.py`) | Public, unauthenticated endpoints for demo games — no `GET`, so a demo can never be re-fetched or resumed (see [🎬 Demo Mode](#-demo-mode)) |
 | **Schemas** (`schemas/game.py`, `schemas/user.py`, `schemas/leaderboard.py`) | Pydantic request/response DTOs |
 | **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, work rolls, revenue, events; every game lookup is filtered by owner. Also computes the leaderboard (best completed-game revenue per user, excluding demo games) and creates/purges demo games |
@@ -120,12 +123,16 @@ Visitors who aren't signed in can click **Try a demo instead** on the home page 
 
 ### 🤖 AI Agent Mode
 
-Signed-in users can open **🤖 Run AI agent** on the home page (`/agent`) and let an LLM play a full Day 9–35 game exactly like a human player. The agent is built with the [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) (`agent-framework-openai`, Chat Completions client), so any OpenAI-compatible endpoint works (OpenAI, OpenRouter, vLLM, Ollama, Azure `…/openai/v1`). The user supplies an agent name, base URL, model and API key.
+Signed-in users can open **🤖 Run AI agent** on the home page (`/agent`) and let an LLM play a full Day 9–35 game exactly like a human player. The agent is built with the [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) (`agent-framework-openai`, Chat Completions client), so any OpenAI-compatible endpoint works (OpenAI, RouterAI, OpenRouter, vLLM, Ollama, Azure `…/openai/v1`). The user supplies an agent name, base URL, model and API key.
 
 - **Same actions as a human.** The agent's function tools map 1:1 to the player's UI actions and call the same `game_engine` functions: `get_game_state` (look at the board), `pull_card`, `assign_worker`, `start_work`, `end_day`. Each mutating tool requires a one-sentence `reason`. Engine errors (e.g. `WIP limit reached for test`) are returned to the model so it can correct itself.
-- **Day loop.** `services/agent_runner.py` runs one asyncio background task per run. Each day is a fresh `agent.run(day_prompt)` whose prompt contains yesterday's end-of-day event (the same dialog a human reads), open deadlines, and the agent's own note from yesterday. If the model stops without starting work or ending the day, a **system safety net** does it and logs that it did, so every game finishes.
-- **Guardrails.** One active run per user, a per-day tool-call cap (`AGENT_DAY_TOOL_CALL_LIMIT`, default 40), a global timeout (`AGENT_MAX_RUN_MINUTES`, default 30), cancel at any time, and runs interrupted by a restart are marked `failed` at startup. `AGENT_ENABLED=false` turns the feature off.
-- **Default provider.** The form is pre-filled with [OpenRouter](https://openrouter.ai) (`AGENT_DEFAULT_BASE_URL=https://openrouter.ai/api/v1`) and OpenAI's fast, low-cost `openai/gpt-6-luna` (`AGENT_DEFAULT_MODEL`). If `AGENT_DEFAULT_API_KEY` is set in `.env` (an OpenRouter key from https://openrouter.ai/keys), users can leave the key field blank. The server key is only ever sent to the default base URL and is never returned by `GET /api/agent/config`. In production it comes from the `AGENT_DEFAULT_API_KEY` GitHub secret.
+- **Knows the rules.** The agent's instructions (`services/agent_prompts.py`) are generated from the engine constants: the board and pull rules, WIP limits, the productivity table, the team roster with the starting team's daily capacity, all four card types and exactly how each pays, and the card catalog with every card's value and A/D/T estimate. It is told only what a human player can know (future events and unannounced expedite cards stay hidden).
+- **Runs in the background.** `services/agent_runner.py` runs one asyncio task per run on the server, independent of the browser: the user can close the page and come back later; the home page shows a banner while a run is active and the agent page pauses polling while hidden. A backend restart ends active runs (they are marked `failed`), because the API key lives only in memory.
+- **Day loop with memory.** The whole game is one conversation: each day appends a day prompt (yesterday's end-of-day event — the same dialog a human reads — open deadlines, the agent's last note and the current board) and the agent's tool calls, results and note. If the model stops without starting work or ending the day, a **system safety net** does it and logs that it did, so every game finishes.
+- **Context summarization** (`services/agent_memory.py`). The context window is `AGENT_CONTEXT_WINDOW_TOKENS` (default 200,000). Before each day, if the estimated context would pass `AGENT_CONTEXT_SUMMARY_THRESHOLD` × window (default 0.3, i.e. ~60k tokens — lower is cheaper), all but the last `AGENT_CONTEXT_KEEP_RECENT_DAYS` days are condensed by the model into a "Game memory" summary (revenue trend, deadlines, team changes, lessons, plan); cuts happen only at day boundaries so tool calls stay paired with their results. If summarization fails, a deterministic summary from the daily journal is used — memory pressure never fails a run. Within a day, the Agent Framework's `ContextWindowCompactionStrategy` collapses older tool results if a single day nears the window. Each summarization is logged as a `context_summarized` run event.
+- **Timeouts and retries.** Every model request has a timeout (`AGENT_LLM_TIMEOUT_SECONDS`, default 120 s) and the OpenAI client's own quick retries (`AGENT_LLM_REQUEST_RETRIES`, default 2); a whole day has a hang guard (`AGENT_DAY_TIMEOUT_SECONDS`, default 900 s). A day that fails with a transient error (timeout, connection error, rate limit, 5xx) is retried up to `AGENT_LLM_RETRIES` times (default 4) with exponential backoff and jitter, honouring `Retry-After`; each retry rebuilds the prompt from the **current** board, since the interrupted attempt may already have moved cards. Authentication and bad-request errors fail immediately; an error after the day already ended only loses the note and the run continues. Every retry is logged as an `llm_retry` run event.
+- **Guardrails.** One active run per user, a per-day tool-call cap (`AGENT_DAY_TOOL_CALL_LIMIT`, default 40), a global run timeout (`AGENT_MAX_RUN_MINUTES`, default 120), repeated board looks without changes answered with a short "unchanged" reply instead of the whole board, cancel at any time, and runs interrupted by a restart are marked `failed` at startup. `AGENT_ENABLED=false` turns the feature off.
+- **Default provider.** The form is pre-filled with [RouterAI](https://routerai.ru), an OpenAI-compatible gateway (`AGENT_DEFAULT_BASE_URL=https://routerai.ru/api/v1`), and OpenAI's fast, low-cost `openai/gpt-4.1-nano` (`AGENT_DEFAULT_MODEL`). If `AGENT_DEFAULT_API_KEY` is set in `.env` (a RouterAI key), users can leave the key field blank. The server key is only ever sent to the default base URL and is never returned by `GET /api/agent/config`. In production it comes from the `AGENT_DEFAULT_API_KEY` GitHub secret.
 - **API key handling.** The key is kept in memory only (request → background task → client), is never written to the database or logs, and is redacted from error messages.
 - **Games.** Agent games are owned by the user, appear in their games list with an **AI** badge, are excluded from the leaderboard (`is_agent`, like `is_demo`), and are read-only for humans (the game routes return 409).
 
@@ -137,7 +144,7 @@ Every player action — by a human through the game routes or by the agent throu
 |---|---|
 | `actor` | `human`, `agent`, or `system` (the runner's safety net acting for the agent) |
 | `seq`, `day` | Order within the game, and the game day of the action |
-| `action` | `day_start` (board snapshot in `state`), `get_game_state`, `pull_card`, `assign_worker`, `start_work`, `end_day`, `day_summary` (the agent's daily note in `reason`), `run_event` |
+| `action` | `day_start` (board snapshot in `state`), `get_game_state`, `pull_card`, `assign_worker`, `start_work`, `end_day`, `day_summary` (the agent's daily note in `reason`, tokens and estimated context size in `result`), `run_event` (`started`, `llm_retry`, `llm_error_after_day_end`, `context_summarized`, `completed`, `failed`, `cancelled`) |
 | `arguments` | Card keys / worker ids, never UUIDs: `{card_key, from_col}`, `{worker_id, worker_type, card_key, card_col}`, `{assignments, idle_workers}` |
 | `result` | `{ok, error?}` plus the outcome: destination column, assign toggle outcome, work-log dice rolls, end-of-day event and overdue cards |
 | `reason` | The agent's rationale for the action |
@@ -220,12 +227,12 @@ KanGame2/
 ├── backend/              # FastAPI API and game engine
 │   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
 │   └── app/
-│       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py, demo.py)
+│       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py, demo.py, agent.py, rules.py)
 │       ├── core/         # Config, database, OIDC client (oauth.py), get_current_user (auth.py)
-│       ├── data/         # Card and event definitions
+│       ├── data/         # Card and event definitions, rank thresholds
 │       ├── models/       # SQLAlchemy models (game.py, user.py)
 │       ├── schemas/      # Pydantic DTOs (game.py, user.py, leaderboard.py)
-│       └── services/     # Game engine logic (incl. leaderboard query)
+│       └── services/     # Game engine, rules data, action log, AI agent (runner, tools, prompts, memory)
 ├── frontend/             # Vue 3 SPA
 │   ├── e2e/               # Playwright end-to-end tests (+ playwright.config.js)
 │   └── src/
@@ -234,7 +241,7 @@ KanGame2/
 │       ├── i18n/         # Locale files (ru, en) and vue-i18n setup
 │       ├── stores/       # Pinia state (gameStore.js, authStore.js) + __tests__/ (Vitest)
 │       ├── services/     # API client
-│       └── views/        # Home, game, demo game, and leaderboard pages
+│       └── views/        # Home, game, demo game, leaderboard, rules, and AI agent pages
 ├── nginx/                # Dev reverse proxy config (docker-compose.yml only)
 ├── deploy/vhost.d/       # nginx-proxy vhost snippets for kangame.pmi.moscow (copied onto the PROD host manually)
 ├── LICENSE               # MIT license
@@ -455,55 +462,94 @@ Mark both as required status checks in the branch protection settings for `main`
 
 0. 🔐 **Sign in** — Authenticate with your organization's OIDC account; the **New Game** button only appears once you're signed in. Not ready to sign in? Click **Try a demo instead** on the home page for a no-account, Day 9–15 preview — it isn't saved and can't be resumed (see [🎬 Demo Mode](#-demo-mode))
 1. 🆕 **Start a game** — Click **New Game** on the home screen; your player name and a random game name are assigned automatically
-2. ↔️ **Pull cards** — Drag a card into the next column (Ready→Analysis, Analysis Done→Development, Dev Done→Test), or click **↑ Pull to Ready** on a Backlog card, respecting WIP limits
-3. 👥 **Assign resources** — Drag a worker onto an Analysis/Development/Test card, or click one or more workers then click a card; assign each worker to a different task or stack several workers on one task; click an assigned badge to unassign
-4. ▶️ **Start Work** — Resolve each assigned worker's output for the day, reduce remaining analysis/development/test work, and automatically advance completed stages
-5. 🌙 **End the day** — Apply daily events, remove overdue fixed-date/expedite work, record metrics, and advance the calendar
-6. 🏆 **Win condition** — Maximize total revenue from Day 9 through Day 35 while meeting fixed-date commitments and handling expedites
-7. 📈 **Check your flow** — Click the 📈 Analytics button in the header at any point during the game, or on the end-game summary screen, to see the Cumulative Flow Diagram, Lead/Cycle Time distributions, and Kanban flow metrics
+2. 📅 **Play each day** — follow the daily routine below, from Day 9 to Day 35
+3. 📈 **Check your flow** — Click the 📈 Analytics button in the header at any point during the game, or on the end-game summary screen, to see the Cumulative Flow Diagram, Lead/Cycle Time distributions, and Kanban flow metrics
+
+The full rules, with the live card catalog and team numbers, are also in the app at **`/rules`** (📜 **Rules of the Game** on the home page; public, no sign-in needed).
+
+### 📅 Your day, step by step
+
+Pulls and assignments are only possible **before** Start Work; after it the board is frozen until the next day.
+
+1. 📰 **Read the event** — the dialog shown when the previous day ended: someone falls ill or comes back, a defect blocks a card, a WIP limit changes, an urgent request arrives.
+2. 🚀 **Deploy** — drag every card from **Test Done** to **Deployed** (and Exp. Test Done → Exp. Deployed). No WIP limit; cards deployed before Start Work already earn money today.
+3. ⬅️ **Pull right to left** — drag cards one column forward: Dev Done → Test, then Analysis Done → Development, then Ready → Analysis. Each pull frees a slot in the stage the card leaves, which makes the next pull to the left possible.
+4. ↑ **Refill Ready** — click **↑ Pull to Ready** on a Backlog card (or drag it) to commit to it; choose by value per day, size and deadlines.
+5. 👥 **Assign the team** — drag a worker onto a card in Analysis/Development/Test, or click one or more workers and then a card. Several workers may stack on one card; click an assigned badge to unassign. Every idle worker is lost capacity.
+6. ▶️ **Start Work** — every assigned worker rolls their points, finished stages move to their Done column, daily revenue from deployed cards is added; assignments are cleared.
+7. 📋 **Review the work log** — who rolled what, which cards advanced or deployed.
+8. 🌙 **End Day** — the day's event is applied, overdue deadline cards are removed (with a fine where one applies), metrics are recorded, the calendar advances.
 
 ### 🃏 Card Types
 
 | Type | Behavior |
 |------|----------|
-| 🔵 Standard | Regular features; earn revenue when deployed |
-| 🟡 Fixed date | Must deploy by due day or incur penalties |
-| 🔴 Expedite | Uses the expedite track and has its own WIP limit |
-| ⚪ Intangible | Tech debt; no direct revenue |
+| 🔵 Standard (S1–S50) | Regular features; once deployed, earn their value **every day** until the game ends |
+| 🟡 Fixed date (F1–F5) | Deadline card: one-off bonus if deployed on time (positive value) or a fine if not deployed on time (negative value) |
+| 🔴 Expedite (E1–E4) | Urgent request announced by a day event; own lane and WIP limit; large one-off payment if delivered on time, or a fine if not |
+| ⚪ Intangible (I1–I5) | Tech work; no revenue, but a permanent +1 to every future roll of one role |
 
 ---
 
 ## 📜 Rules of the Game
 
-### 👥 Team & Roles
+The numbers below come from `backend/app/data/cards.py` and `services/game_engine.py`; `GET /api/rules` serves the same numbers to the in-app rules page, and the AI agent's instructions are generated from them too.
 
-Three roles — **Analyst**, **Developer**, **Tester** — share a roster of 12 workers (4 per role). A new game starts with 7 of them active (2 analysts, 2 developers, 3 testers); the rest join over time as day events bring people on ("New Developer Hired"), and active workers can also temporarily leave ("Analyst on Vacation", "Tester Out Sick") until a matching event brings them back. Any active worker can be assigned to any card in an active-work column, but each role is most productive in its own stage.
+### 🎯 Goal
 
-### 🧮 Worker Productivity
-
-Every time you click **Start Work**, each assigned worker rolls a random amount of work in their role's range for the card's current stage, and that amount (plus any active buff — see Intangible cards below) is subtracted from the card's remaining points for that stage:
-
-| Stage | Analyst | Developer | Tester |
-|---|---|---|---|
-| Analysis | 1–6 | 1–4 | 1–4 |
-| Development | 1–3 | 3–7 | 2–4 |
-| Testing | 2–5 | 2–5 | 3–7 |
-
-A card automatically advances to its next column once a stage's remaining points reach zero — there's no separate "finish stage" action.
+Run a software team's Kanban board from **Day 9 to Day 35** and finish with the highest total revenue. Money comes **only** from cards that reach Deployed — a card stuck anywhere else earns nothing, however far along it is.
 
 ### 🔄 Columns, Pulling & WIP
 
-Flow: **Backlog → Ready → Analysis → Analysis Done → Development → Dev Done → Test → Deployed**, with a parallel Expedite track (**Exp. Backlog → Exp. Ready → Exp. Analysis → Exp. Analysis Done → Exp. Development → Exp. Dev Done → Exp. Test → Exp. Deployed**) that only appears once its expedite card is announced. A card can move only one column at a time, and only into a column that's under its WIP limit. Starting limits: **Ready 5 · Analysis 3 · Development 5 · Test 3 · Expedite 1** — some day events change these mid-game.
+Flow: **Backlog → Ready → Analysis → Analysis Done → Development → Dev Done → Test → Test Done → Deployed**, with a parallel Expedite track (**Exp. Backlog → Exp. Ready → Exp. Analysis → … → Exp. Deployed**) that appears once an expedite card is announced.
+
+- **Analysis, Development and Test** are *working* columns — only there can people work on a card. Each has a *Done* column where a finished card waits.
+- A card moves in exactly two ways: **automatically** into its stage's Done column when the stage's remaining points reach 0 during Start Work, or **by your pull** — one column at a time — for every other move. Nobody moves cards for you.
+- **WIP limits** count a stage's working and Done columns together (Analysis = Analysis + Analysis Done, etc.). Starting limits: **Ready 5 · Analysis 3 · Development 5 · Test 3 · Expedite 1** (Exp. Ready). A pull into a full stage is rejected, so you free a stage by pulling its finished cards onward — always right to left. Day events change limits mid-game (e.g. Ready drops to 3).
+
+### 👥 Team & Capacity
+
+Three roles — **Analyst**, **Developer**, **Tester** — share a roster of 12 workers (`a1–a4`, `d1–d4`, `t1–t4`). A game starts with 7 active: **a1, a2, d1, d2, t1, t2, t3**. The others join, and active workers leave or return, only through day events (hiring, illness, vacation, conference, resignation, restructuring). Inactive workers can't be assigned.
+
+Each Start Work, every assigned worker rolls a uniform random whole number of points in their range for the card's **current stage**, plus any buff:
+
+| Stage | Analyst | Developer | Tester |
+|---|---|---|---|
+| Analysis | **1–6** (avg 3.5) | 1–4 (avg 2.5) | 1–4 (avg 2.5) |
+| Development | 1–3 (avg 2) | **3–7** (avg 5) | 2–4 (avg 3) |
+| Testing | 2–5 (avg 3.5) | 2–5 (avg 3.5) | **3–7** (avg 5) |
+
+- Expected daily capacity of the starting team with everyone in their own stage: **Analysis ≈ 7, Development ≈ 10, Test ≈ 15 points**.
+- Days to finish a stage ≈ points left ÷ the sum of the assigned workers' averages. One worker works one card per day; several workers on one card add up; points beyond what a stage needs are lost.
+- **Blockers** (day events): each worker assigned to a blocked card rolls 1d6 against the blocker (5–7 points) instead of working; once it's cleared, leftover points go into the card. Anyone can clear a blocker.
+- **Buffs**: each deployed intangible card adds +1 to every future roll of one role.
+
+### 📏 Card Estimates
+
+Every card has an Analysis / Development / Test estimate in points (3–10 per stage). Standard cards are worth **4,200–9,100 ₽ per day**; S1–S13 start on the board already partly done (S1–S3 in Test, S4–S5 in Dev Done, S6–S7 in Development, S8 in Analysis Done, S9–S10 in Analysis, S11–S13 with F1 and I1 in Ready), and later backlog cards are smaller (≈ 3–8 points per stage). Special cards:
+
+| Card | A / D / T | Value | Due |
+|---|---|---|---|
+| F1 | 3 / 3 / 3 | +10,500 ₽ bonus | end of Day 15 |
+| F2 | 4 / 5 / 3 | −35,000 ₽ fine | end of Day 20 |
+| F3 | 8 / 9 / 8 | +7,000 ₽ bonus | end of Day 25 |
+| F4 | 6 / 7 / 5 | +14,000 ₽ bonus | end of Day 30 |
+| F5 | 5 / 6 / 4 | −21,000 ₽ fine | end of Day 28 |
+| I1–I5 | 3–6 / 4–9 / 3–7 | +1 buff: developer (I1, I3), analyst (I2), tester (I4, I5) | — |
+
+The complete catalog is in [`backend/app/data/cards.py`](backend/app/data/cards.py) and on the `/rules` page. Expedite cards are revealed only when a day event announces them.
 
 ### 💰 Revenue, Bonuses & Penalties
 
-- **Standard** cards pay their full value once, the moment they're deployed.
-- **Fixed-date** and **Expedite** cards each carry a due day: deploying on or before it pays a bonus (or simply earns the card's value); deploying late — or still being in the pipeline when the due day passes — applies that card's penalty and, if it never deployed in time, removes it from the board entirely.
-- **Intangible** cards earn no revenue. Deploying one instead grants a permanent +1 bonus added to every future work roll for one role (analyst, developer, or tester, per card) — a standing investment in team efficiency rather than a cash payout.
+- **Standard** cards pay their value **every day** once deployed, counted at each Start Work — so a card deployed before Start Work earns that same day, and earlier deployment means more paying days.
+- **Fixed-date** cards pay nothing daily. Positive value: one-off bonus if deployed by the end of the due day, nothing if late. Negative value: a fine if the card is not deployed on time.
+- **Expedite** cards: positive value = payment if deployed on time; negative value = a fine if *not* deployed on time (delivering on time costs nothing).
+- **Intangible** cards earn no revenue; they grant the permanent +1 buff.
+- **Overdue rule**: a fixed-date or expedite card still on the board (Ready or further, or anywhere in the expedite lane) at the end of its due day is removed; a negative-value card then charges its fine. Fixed-date cards never pulled out of the Backlog are not removed.
 
 ### 🎲 Day Events
 
-Ending a day (Day 9 through Day 35) triggers that day's scripted event: a worker leaving or returning, a blocker appearing on the first card in Test or Development (any worker can clear it, but that story can't progress until it's cleared), a WIP-limit change, the "Carlos" testing-quality policy toggling on/off, a late-game "specialization lockdown" notice, and the four Expedite cards being announced with their own deadlines and payouts. Event notifications are shown in your selected UI language (see [🌐 Localization](#-localization)).
+Ending a day (Day 9 through Day 35) triggers that day's scripted event, the same in every game: a worker leaving or returning, a blocker on the first card in Test or Development, a WIP-limit change, the "Carlos" testing-quality policy toggling on/off, a late-game "specialization lockdown" notice, and the four Expedite cards being announced with their own deadlines and payouts. Event notifications are shown in your selected UI language (see [🌐 Localization](#-localization)).
 
 ### 🏆 Scoring
 
@@ -517,11 +563,19 @@ The game ends after Day 35. Your final rank is based on total revenue earned:
 | ≥ ₽150,000 | 🥉 Agile Starter |
 | below ₽150,000 | 📚 Keep Learning |
 
+### 💡 Tips
+
+- Stop starting, start finishing: deploy first, then pull right to left.
+- Swarm: put two or three people on one card so it finishes its stage today.
+- Never leave anyone idle — a specialist with nothing in their stage helps the nearest stage downstream.
+- Pull fixed-date and expedite cards early enough to make it through every stage.
+- Intangible cards pay off only if many days remain to use the buff.
+
 ---
 
 ## 🔌 API Endpoints
 
-All `/api/games*` routes require a signed-in session and only operate on games owned by the current user (others 404, not 403, to avoid leaking existence). `GET /api/leaderboard` and all `/api/demo*` routes are the exceptions — they're public and require no session.
+All `/api/games*` routes require a signed-in session and only operate on games owned by the current user (others 404, not 403, to avoid leaking existence). `GET /api/leaderboard`, `GET /api/rules` and all `/api/demo*` routes are the exceptions — they're public and require no session.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -531,6 +585,7 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 | `POST` | `/api/auth/logout` | Clear the session |
 | `POST` | `/api/dev/test-login` | **Test-only.** Disabled by default (404) unless `ENABLE_TEST_LOGIN=true`; bypasses OIDC for e2e tests — see [🧪 Testing](#-testing) |
 | `GET` | `/api/leaderboard` | **Public, no auth required.** Top 5 users by their best completed game's revenue |
+| `GET` | `/api/rules` | **Public, no auth required.** Rule numbers from the engine: productivity ranges, WIP limits, roster, card catalog (without expedite cards), rank thresholds |
 | `POST` | `/api/games` | Create a new game, owned by the current user |
 | `GET` | `/api/games` | List the current user's games |
 | `GET` | `/api/games/{id}` | Get game state |

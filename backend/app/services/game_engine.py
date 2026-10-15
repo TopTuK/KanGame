@@ -440,7 +440,7 @@ def _apply_deploy_bonuses(game: Game, card: Card, log: list[dict]) -> None:
         if on_time and card.val > 0:
             game.total_revenue += card.val
             log.append({"type": "bonus", "card_key": card.card_key, "amount": card.val})
-        elif card.val < 0:
+        elif not on_time and card.val < 0:
             game.total_revenue += card.val
             log.append({"type": "penalty", "card_key": card.card_key, "amount": card.val})
 

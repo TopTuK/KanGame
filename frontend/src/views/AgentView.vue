@@ -10,7 +10,10 @@
         <router-link to="/" class="text-sm text-slate-400 hover:text-slate-200 transition-colors">{{ t('agent.back') }}</router-link>
         <h1 class="font-display text-2xl font-bold text-white">🤖 {{ t('agent.title') }}</h1>
       </div>
-      <LanguageSelector />
+      <div class="flex items-center gap-4">
+        <router-link to="/rules" class="text-sm text-slate-400 hover:text-slate-200 transition-colors">{{ t('agent.rules') }}</router-link>
+        <LanguageSelector />
+      </div>
     </header>
 
     <main class="flex-1 grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 p-6 max-w-[1600px] w-full mx-auto">
@@ -135,6 +138,10 @@
               <div class="text-lg font-bold text-white">{{ (selected.input_tokens + selected.output_tokens).toLocaleString() }}</div>
             </div>
           </div>
+
+          <p v-if="isActive(selected.status)" class="text-sm text-sky-200 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2 mb-4">
+            ℹ️ {{ t('agent.backgroundNotice') }}
+          </p>
 
           <p v-if="selected.error" class="text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2 mb-4 break-words">
             {{ t('agent.error') }}: {{ selected.error }}
@@ -290,12 +297,43 @@ function describe(a) {
     case 'day_start':
       return a.state ? `Σ ${fmtRub(a.state.total_revenue)}` : ''
     case 'day_summary':
-      return res.tool_calls != null ? `${res.tool_calls} tool calls` : ''
+      return [
+        res.tool_calls != null ? `${res.tool_calls} tool calls` : '',
+        res.context_tokens ? t('agent.contextTokens', { tokens: res.context_tokens.toLocaleString() }) : '',
+      ].filter(Boolean).join(' · ')
     case 'run_event':
-      return [res.event, res.model, res.error].filter(Boolean).join(' · ')
+      return describeRunEvent(res)
     default:
       return ''
   }
+}
+
+function describeRunEvent(res) {
+  switch (res.event) {
+    case 'llm_retry':
+      return t('agent.runEvents.llm_retry', {
+        error: res.error, attempt: res.attempt, max: res.max_attempts ?? '?', delay: res.delay_seconds ?? '?',
+      })
+    case 'llm_error_after_day_end':
+      return t('agent.runEvents.llm_error_after_day_end', { error: res.error })
+    case 'context_summarized':
+      return t(res.fallback ? 'agent.runEvents.context_summarized_fallback' : 'agent.runEvents.context_summarized', {
+        days: summarizeDays(res.days_summarized),
+        before: (res.tokens_before || 0).toLocaleString(),
+        after: (res.tokens_after || 0).toLocaleString(),
+      })
+    default: {
+      const label = ['started', 'completed', 'failed', 'cancelled'].includes(res.event)
+        ? t(`agent.runEvents.${res.event}`)
+        : res.event
+      return [label, res.model, res.error].filter(Boolean).join(' · ')
+    }
+  }
+}
+
+function summarizeDays(days) {
+  if (!days?.length) return ''
+  return days.length > 1 ? `${days[0]}–${days[days.length - 1]}` : `${days[0]}`
 }
 
 function describeLogEntry(e) {
@@ -360,7 +398,14 @@ async function poll() {
 
 function schedulePoll() {
   stopPolling()
+  // The run itself lives on the server; a hidden tab doesn't need live updates.
+  if (document.hidden) return
   if (selected.value && isActive(selected.value.status)) pollTimer = setTimeout(poll, POLL_MS)
+}
+
+function onVisibilityChange() {
+  if (document.hidden) stopPolling()
+  else if (selected.value && isActive(selected.value.status)) poll()
 }
 
 function stopPolling() {
@@ -410,6 +455,7 @@ async function cancelRun() {
 }
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', onVisibilityChange)
   await loadConfig()
   loadSavedForm()
   await loadRuns()
@@ -417,5 +463,8 @@ onMounted(async () => {
   if (active || runs.value.length) await selectRun((active || runs.value[0]).id)
 })
 
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  stopPolling()
+})
 </script>

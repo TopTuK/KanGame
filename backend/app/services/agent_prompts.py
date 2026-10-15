@@ -9,7 +9,7 @@ even small models can play without decoding raw JSON.
 """
 from typing import Optional
 
-from app.data.cards import CARD_DEFINITIONS, INITIAL_WIP, PULL_MOVES, WIP_GROUPS
+from app.data.cards import CARD_DEFINITIONS, INITIAL_BOARD, INITIAL_WIP, INITIAL_WORKERS, PULL_MOVES, WIP_GROUPS
 from app.services.game_engine import WORK_RANGES, PULL_WIP_KEYS, can_pull_to, wip_count
 
 ROLES = ("analyst", "developer", "tester")
@@ -92,6 +92,42 @@ def _specialist_avg(stage: int) -> float:
     return _avg(WORK_RANGES[stage][SPECIALIST_OF_STAGE[stage]])
 
 
+_START_COLUMN = {key: col for col, keys in INITIAL_BOARD.items() for key in keys}
+
+
+def _card_catalog() -> str:
+    """Every standard card with its daily value and A/D/T estimate (the numbers printed on the cards)."""
+    items = []
+    for c in CARD_DEFINITIONS:
+        if c["type"] != "standard":
+            continue
+        where = _START_COLUMN.get(c["key"])
+        items.append(
+            f"{c['key']} {c['val']}/day A{c['analysis']} D{c['dev']} T{c['test']}"
+            + (f" (starts in {where})" if where else "")
+        )
+    return "\n".join("; ".join(items[i:i + 4]) for i in range(0, len(items), 4))
+
+
+def _team_roster() -> str:
+    lines = []
+    for role in ROLES:
+        ids = [w["id"] for w in INITIAL_WORKERS if w["type"] == role]
+        active = [w["id"] for w in INITIAL_WORKERS if w["type"] == role and w["active"]]
+        lines.append(f"- {role}s: {', '.join(ids)} (active at the start: {', '.join(active) or 'none'})")
+    return "\n".join(lines)
+
+
+def _starting_capacity() -> str:
+    """Expected points per day of the starting team if every worker stays in their own stage."""
+    parts = []
+    for bar in (0, 1, 2):
+        role = SPECIALIST_OF_STAGE[bar]
+        n = sum(1 for w in INITIAL_WORKERS if w["type"] == role and w["active"])
+        parts.append(f"{STAGE_NAMES[bar]} about {n} x {_specialist_avg(bar):g} = {n * _specialist_avg(bar):g} points/day")
+    return "; ".join(parts)
+
+
 KANBAN_INSTRUCTIONS = f"""
 You are playing a Kanban team-management simulation (based on the getKanban board game)
 exactly like a human player does in the web UI. You manage a software team's board from
@@ -140,41 +176,61 @@ Events can change limits; the board always shows current limits and usage.
 # 5. Work, workers and how to assign them
 A card has three amounts of work: analysis / development / test points. The board shows the
 points left for the stage the card is currently in ("left: N").
-During start_work each assigned worker rolls dice for the stage of the card they are on:
+During start_work each assigned worker rolls a random whole number of points for the stage of
+the card they are on (uniform in the range; "avg" is the expected value):
 {_productivity_table()}
 Rules:
 - Workers can only be assigned to cards in WORKING columns (analysis, development, test,
   exp_analysis, exp_development, exp_test). Assigning to a card in ready / *_done / backlog fails.
 - One worker works on one card per day. Several workers may work on the same card (their points add up).
+  Points beyond what a stage needs are lost (they do not carry over to another card or stage).
 - Assigning a worker to a card they are ALREADY on UNASSIGNS them (it is a toggle). Assigning
   them to a different card moves them. So assign each worker exactly once per day.
-- Inactive workers (sick, on vacation, quit) cannot be assigned. The board lists who is active.
+- Inactive workers (sick, on vacation, quit, not hired yet) cannot be assigned. The board lists who is active.
 - All assignments are cleared after start_work: assign everyone again every day.
 - Blocked cards cannot progress: each worker assigned to a blocked card rolls 1d6 against the
   blocker instead; once the blocker reaches 0, leftover points go into the card's work.
+- Buffs: each deployed intangible card adds +1 to every future roll of one role (shown on the board).
+
+# 6. The team and its capacity
+The roster has 12 workers; worker ids never change:
+{_team_roster()}
+Workers join or leave only through day events (hired, sick, vacation, conference, quit,
+restructure); the board always shows who is active today.
+Expected capacity of the starting team with everyone in their own stage:
+{_starting_capacity()}.
 How to assign well:
 - Put every active worker on some card — an idle worker is wasted capacity.
 - Specialists first: testers on test cards, developers on development cards, analysts on analysis cards.
 - Concentrate: put enough people on a card to FINISH its stage soon, instead of one person per
-  card everywhere. A specialist does about {_specialist_avg(0):g} (analyst), {_specialist_avg(1):g} (developer),
-  {_specialist_avg(2):g} (tester) points per day on average. Example: a card with 9 test points left needs
-  about 2 testers to finish in one day.
+  card everywhere. Days to finish a stage = points left / sum of the assigned workers' averages.
+  Example: a card with 9 test points left needs about 2 testers ({_specialist_avg(2):g} each) to finish in one day.
 - Prefer cards closest to deployment (test before development before analysis) and cards with deadlines.
 - If a stage has no card for a specialist, send them to help the most downstream stage that has
   work (e.g. a developer helps test). Cross-role help is slower but better than idle.
 
-# 6. Money
+# 7. Card types (classes of service) and money
 - Standard cards (S*) earn their value **every day** once deployed. Revenue is counted during
   start_work, so a card pulled into deployed before start_work earns money that same day.
   The earlier a card is deployed, the more days it earns — finishing cards beats starting cards.
-- Fixed-date cards (F*): one-off bonus or penalty depending on the deadline:
+- Fixed-date cards (F*) earn nothing per day; they have a deadline (end of the due day). A
+  positive value is a one-off bonus if deployed on time (nothing if late); a negative value is a
+  fine charged if the card is not deployed on time:
 {_special_cards()}
-- Expedite cards (E*) appear in exp_backlog with a deadline and a large one-off value
-  (positive = payment if delivered on time, negative = fine). Treat them as top priority.
-- A fixed-date or expedite card still on the board (ready..test_done or the expedite lane) at
-  the end of its due day is removed; a negative-value card then charges its penalty.
+- Expedite cards (E*) appear in exp_backlog when a day event announces them, with a deadline and
+  a large one-off value: positive = payment if deployed on time, negative = fine if NOT deployed
+  on time (deploying on time costs nothing). They use the expedite lane (exp_ready WIP limit 1).
+  Treat them as top priority.
+- Intangible cards (I*) earn no money; deploying one gives a permanent +1 buff to every future
+  roll of one role. Worth it early in the game, rarely worth it late.
+- Overdue: a fixed-date or expedite card still on the board (ready..test_done, or anywhere in the
+  expedite lane) at the end of its due day is removed; a negative-value card then charges its fine.
+  Fixed-date cards never pulled out of backlog are not removed.
 
-# 7. Daily routine (follow it every day, in this order)
+# 8. Card catalog: standard cards, value per day and A/D/T estimate in points
+{_card_catalog()}
+
+# 9. Daily routine (follow it every day, in this order)
 1. Read the board (it is in the day message; call get_game_state again after changes if needed).
 2. DEPLOY: pull every card in test_done (and exp_test_done) — no WIP limit, always do it.
 3. PULL RIGHT TO LEFT, one stage at a time, as long as the board says the pull is possible:
@@ -184,9 +240,10 @@ How to assign well:
 5. start_work once.
 6. end_day once.
 7. Reply with a short note (1-3 sentences): what you did, why, and what to do tomorrow.
-   This note is given back to you at the start of the next day.
+   Earlier days stay in this conversation (older days are condensed into a "Game memory"
+   summary), so use them to plan ahead.
 
-# 8. Worked example (the opening board)
+# 10. Worked example (the opening board)
 Board: test has S1, S2, S3 (test 3/3 FULL); dev_done has S4, S5; development has S6, S7
 (development 4/5, 1 free); analysis_done has S8; analysis has S9, S10 (analysis 3/3 FULL);
 ready is full. Active: a1, a2 (analysts), d1, d2 (developers), t1, t2, t3 (testers).
@@ -201,7 +258,7 @@ Next morning: S1-S3 will probably be in test_done -> deploy them first, which fr
 stage -> pull S4 and S5 from dev_done into test -> that frees development -> pull from
 analysis_done, and so on, always right to left.
 
-# 9. Common mistakes to avoid
+# 11. Common mistakes to avoid
 - Forgetting to pull cards out of analysis_done / dev_done / test_done (the card stays there and
   blocks the WIP of its stage). Check those columns first every day.
 - Trying to pull after start_work (always rejected).

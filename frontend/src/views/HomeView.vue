@@ -90,6 +90,21 @@
         >
           🤖 {{ t('home.startAgent') }}
         </router-link>
+        <router-link
+          v-if="activeRun"
+          to="/agent"
+          class="flex items-center justify-between gap-2 mt-3 rounded-xl px-4 py-2.5 text-sm bg-violet-500/10 border border-violet-500/30 text-violet-200 hover:bg-violet-500/20 transition-colors"
+        >
+          <span class="flex items-center gap-2 min-w-0">
+            <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-violet-300 animate-pulse"></span>
+            <span class="truncate">{{ t('home.agentRunning', {
+              name: activeRun.name,
+              current: activeRun.game?.current_day ?? '—',
+              total: activeRun.game?.total_days ?? '—',
+            }) }}</span>
+          </span>
+          <span class="shrink-0 font-medium">{{ t('home.agentRunningOpen') }}</span>
+        </router-link>
         <button
           @click="authStore.logout()"
           class="w-full mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors"
@@ -144,7 +159,15 @@
     </div>
 
     <!-- External links -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl w-full mx-auto mt-12 mb-4 animate-fade-in px-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl w-full mx-auto mt-12 mb-4 animate-fade-in px-4">
+      <router-link
+        to="/rules"
+        class="glass glass-hover rounded-2xl p-6 flex flex-col items-center text-center"
+      >
+        <div class="w-12 h-12 mb-3 rounded-xl bg-sky-500/10 flex items-center justify-center text-2xl">📜</div>
+        <h3 class="font-display font-semibold text-white mb-1">{{ t('home.rulesLink') }}</h3>
+        <p class="text-sm text-slate-400">{{ t('home.rulesLinkDesc') }}</p>
+      </router-link>
       <router-link
         to="/leaderboard"
         class="glass glass-hover rounded-2xl p-6 flex flex-col items-center text-center"
@@ -185,10 +208,10 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { gamesApi } from '../services/api.js'
+import { agentApi, gamesApi } from '../services/api.js'
 import { useGameContent } from '../composables/useGameContent.js'
 import { useAuthStore } from '../stores/authStore.js'
 import { useIsMobileOrTablet } from '../composables/useIsMobileOrTablet.js'
@@ -213,6 +236,7 @@ function fmtRub(n) {
 }
 const creating = ref(false)
 const games = ref([])
+const activeRun = ref(null)
 const editingUsername = ref(false)
 const usernameDraft = ref('')
 const savingUsername = ref(false)
@@ -227,6 +251,44 @@ async function loadGames() {
     games.value = res.data
   } catch {}
 }
+
+// Agent runs keep playing on the server after their page is closed; point back to one.
+const ACTIVE_RUN_POLL_MS = 15000
+let activeRunTimer = null
+let unmounted = false
+
+async function loadActiveRun() {
+  try {
+    const runs = (await agentApi.listRuns()).data
+    if (unmounted) return
+    activeRun.value = runs.find((r) => r.status === 'pending' || r.status === 'running') || null
+  } catch {}
+  scheduleActiveRunPoll()
+}
+
+function stopActiveRunPoll() {
+  if (activeRunTimer) clearTimeout(activeRunTimer)
+  activeRunTimer = null
+}
+
+// Keep the banner's day count current while Home is visible and a run is playing.
+function scheduleActiveRunPoll() {
+  stopActiveRunPoll()
+  if (unmounted || document.hidden || !activeRun.value) return
+  activeRunTimer = setTimeout(loadActiveRun, ACTIVE_RUN_POLL_MS)
+}
+
+function onVisibilityChange() {
+  if (document.hidden) stopActiveRunPoll()
+  else if (authStore.isAuthenticated) loadActiveRun()
+}
+
+document.addEventListener('visibilitychange', onVisibilityChange)
+onBeforeUnmount(() => {
+  unmounted = true
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  stopActiveRunPoll()
+})
 
 function startEditUsername() {
   usernameDraft.value = authStore.user?.username || ''
@@ -248,6 +310,7 @@ watch(
   (checked) => {
     if (checked && authStore.isAuthenticated) {
       loadGames()
+      loadActiveRun()
     }
   },
   { immediate: true }

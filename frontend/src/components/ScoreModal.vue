@@ -102,6 +102,7 @@ const avgThroughput = computed(() => {
 })
 const maxRevenue = computed(() => Math.max(1, ...metrics.value.map(m => m.daily_revenue)))
 
+// Thresholds mirror backend/app/data/scoring.py (served to the rules page).
 const rank = computed(() => {
   const rev = store.game?.total_revenue || 0
   if (rev >= 700000) return t('score.rankMaster')

@@ -14,7 +14,7 @@ from app.core.username import resolve_initial_username
 from app.models.user import User
 from app.models.agent import AGENT_RUN_ACTIVE_INDEX, ACTIVE_RUN_WHERE, GAME_ACTION_SEQ_INDEX
 from app.services import game_engine, agent_runner
-from app.api.routes import games, auth, leaderboard, demo, agent
+from app.api.routes import games, auth, leaderboard, demo, agent, rules
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +140,7 @@ app.include_router(auth.router, tags=["auth"])
 app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["leaderboard"])
 app.include_router(demo.router, prefix="/api/demo", tags=["demo"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+app.include_router(rules.router, prefix="/api/rules", tags=["rules"])
 
 
 @app.get("/health")

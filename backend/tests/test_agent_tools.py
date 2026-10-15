@@ -126,3 +126,16 @@ async def test_tools_cannot_reach_another_users_game(db_session, user):
     tools = {t.name: t.func for t in make_tools(ctx)}
     assert await tools["get_game_state"]() == "ERROR: game not found"
     assert await tools["start_work"](reason="r") == "ERROR: game not found"
+
+
+async def test_repeated_look_without_changes_returns_short_answer(db_session, user):
+    _, ctx, tools = await _setup(db_session, user)
+    assert (await tools["get_game_state"]()).startswith("DAY 9 of 35")
+    assert (await tools["get_game_state"]()).startswith("Board unchanged since your last get_game_state call")
+    # A failed pull changes nothing; a successful one does.
+    assert (await tools["pull_card"](card_key="S11", reason="r")).startswith("ERROR")
+    assert (await tools["get_game_state"]()).startswith("Board unchanged")
+    assert (await tools["pull_card"](card_key="S8", reason="r")).startswith("OK")
+    assert (await tools["get_game_state"]()).startswith("DAY 9 of 35")
+    ctx.begin_day(10)
+    assert (await tools["get_game_state"]()).startswith("DAY 9 of 35")  # a new day always shows the board

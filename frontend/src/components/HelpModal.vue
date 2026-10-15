@@ -13,6 +13,7 @@
           <li>{{ t('help.endDay') }}</li>
         </ul>
         <p class="text-amber-300 font-medium">{{ t('help.f1deadline') }}</p>
+        <a href="/rules" target="_blank" rel="noopener" class="inline-block text-sky-400 hover:text-sky-300">{{ t('help.fullRules') }}</a>
       </div>
       <div class="px-6 py-4 border-t border-slate-700 flex justify-end">
         <button @click="$emit('close')" class="btn-primary px-6 py-2">{{ t('help.gotIt') }}</button>
