@@ -24,7 +24,7 @@ An interactive web simulation of Kanban methodology, inspired by [getKanban®](h
 - 🔐 **Authentication** — Sign in with your organization's OIDC account before starting or resuming a game
 - 💾 **Persistent, per-user games** — Save and resume your own games via PostgreSQL; each player only sees their own
 - 🎬 **Demo mode** — Try a shortened Day 9–15 simulation from the home page with no account needed; not saved, not resumable, and excluded from the leaderboard (see [🎬 Demo Mode](#-demo-mode))
-- 🏆 **Public leaderboard** — Top 5 users by best completed-game revenue, viewable at `/leaderboard` without signing in; demo games never count
+- 🏆 **Public leaderboard** — Top 5 users by best completed-game revenue, viewable at `/leaderboard` without signing in; demo games never count. A separate **AI agents** table ranks finished agent runs and shows which LLM model each one used
 - 📜 **Rules page** — Public `/rules` page: step-by-step daily routine, card types, the full card catalog with estimates, team capacity and scoring, with numbers served live from the engine (see [📜 Rules of the Game](#-rules-of-the-game))
 - 🤖 **AI agent player** — Let an LLM play a full game in the background with the same actions as a human, every action logged with its reason (see [🤖 AI Agent Mode](#-ai-agent-mode))
 - 🌐 **Localization** — Russian and English UI; Russian is the default; switch language from the header selector (preference saved in the browser)
@@ -134,7 +134,7 @@ Signed-in users can open **🤖 Run AI agent** on the home page (`/agent`) and l
 - **Guardrails.** One active run per user, a per-day tool-call cap (`AGENT_DAY_TOOL_CALL_LIMIT`, default 40), a global run timeout (`AGENT_MAX_RUN_MINUTES`, default 120), repeated board looks without changes answered with a short "unchanged" reply instead of the whole board, cancel at any time, and runs interrupted by a restart are marked `failed` at startup. `AGENT_ENABLED=false` turns the feature off.
 - **Default provider.** The form is pre-filled with [RouterAI](https://routerai.ru), an OpenAI-compatible gateway (`AGENT_DEFAULT_BASE_URL=https://routerai.ru/api/v1`), and OpenAI's fast, low-cost `openai/gpt-4.1-nano` (`AGENT_DEFAULT_MODEL`). If `AGENT_DEFAULT_API_KEY` is set in `.env` (a RouterAI key), users can leave the key field blank. The server key is only ever sent to the default base URL and is never returned by `GET /api/agent/config`. In production it comes from the `AGENT_DEFAULT_API_KEY` GitHub secret.
 - **API key handling.** The key is kept in memory only (request → background task → client), is never written to the database or logs, and is redacted from error messages.
-- **Games.** Agent games are owned by the user, appear in their games list with an **AI** badge, are excluded from the leaderboard (`is_agent`, like `is_demo`), and are read-only for humans (the game routes return 409).
+- **Games.** Agent games are owned by the user, appear in their games list with an **AI** badge, are excluded from the human leaderboard (`is_agent`, like `is_demo`) but ranked in its separate **AI agents** table with their model, and are read-only for humans (the game routes return 409).
 
 #### 📝 Action log (human and agent)
 
@@ -585,6 +585,7 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 | `POST` | `/api/auth/logout` | Clear the session |
 | `POST` | `/api/dev/test-login` | **Test-only.** Disabled by default (404) unless `ENABLE_TEST_LOGIN=true`; bypasses OIDC for e2e tests — see [🧪 Testing](#-testing) |
 | `GET` | `/api/leaderboard` | **Public, no auth required.** Top 5 users by their best completed game's revenue |
+| `GET` | `/api/leaderboard/agents` | **Public, no auth required.** Top 10 finished AI agent runs: agent name, LLM model, who launched it, revenue (base URLs are never exposed) |
 | `GET` | `/api/rules` | **Public, no auth required.** Rule numbers from the engine: productivity ranges, WIP limits, roster, card catalog (without expedite cards), rank thresholds |
 | `POST` | `/api/games` | Create a new game, owned by the current user |
 | `GET` | `/api/games` | List the current user's games |

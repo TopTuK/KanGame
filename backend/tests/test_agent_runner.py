@@ -196,6 +196,46 @@ async def test_leaderboard_excludes_agent_games(db_session, user):
     assert board == [{"name": "tester", "profit": 1000}]
 
 
+async def test_agent_leaderboard_lists_finished_runs_with_model(db_session, user, api_client):
+    from datetime import datetime
+    from app.models.user import User
+
+    other = User(id=uuid.uuid4(), sub="bot-owner", name="Owner Two", username="owner2")
+    db_session.add(other)
+    await db_session.commit()
+
+    async def finished(owner, name, model, revenue, run_status=AgentRunStatus.completed, done=True):
+        game = await ge.create_game(db_session, f"🤖 {name}", name, owner.id, is_agent=True)
+        game.status = GameStatus.completed if done else GameStatus.active
+        game.total_revenue = revenue
+        db_session.add(AgentRun(
+            id=uuid.uuid4(), user_id=owner.id, game_id=game.id, name=name, model=model,
+            base_url="http://private-llm.internal/v1", status=run_status, finished_at=datetime.utcnow(),
+        ))
+        await db_session.commit()
+
+    await finished(user, "Nano", "openai/gpt-4.1-nano", 300000)
+    await finished(other, "Big", "anthropic/claude-opus", 650000)
+    await finished(user, "Quit", "m", 999999, run_status=AgentRunStatus.cancelled, done=False)
+    await finished(other, "Broke", "m", 888888, run_status=AgentRunStatus.failed, done=False)
+    human = await ge.create_game(db_session, "Human", "Alice", user.id)
+    human.status, human.total_revenue = GameStatus.completed, 777777
+    await db_session.commit()
+
+    board = await ge.get_top_agent_runs(db_session)
+    assert [(e["agent_name"], e["model"], e["owner"], e["profit"]) for e in board] == [
+        ("Big", "anthropic/claude-opus", "owner2", 650000),
+        ("Nano", "openai/gpt-4.1-nano", "tester", 300000),
+    ]
+    assert len(await ge.get_top_agent_runs(db_session, limit=1)) == 1
+    # The human leaderboard stays human-only.
+    assert [e["profit"] for e in await ge.get_top_leaderboard(db_session)] == [777777]
+
+    res = await api_client.get("/api/leaderboard/agents")
+    assert res.status_code == 200 and res.json()[0]["model"] == "anthropic/claude-opus"
+    assert "private-llm" not in res.text  # base URLs are never exposed
+
+
 async def test_fail_interrupted_runs_marks_active_runs_failed(db_session, user):
     _, run, _ = await _new_run(db_session, user)
     run_id = run.id

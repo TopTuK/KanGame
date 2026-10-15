@@ -12,6 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.game import Game, Card, GameEvent, GameMetric, GameStatus, CardColumn
 from app.models.user import User
+from app.models.agent import AgentRun, AgentRunStatus
 
 # All demo games are owned by this single system user (see main.py startup,
 # which guarantees the row exists before the app accepts requests). Demo
@@ -328,6 +329,33 @@ async def get_top_leaderboard(db: AsyncSession, limit: int = 5) -> list[dict]:
     return [
         {"name": username or name or "Anonymous", "profit": profit}
         for username, name, profit in result.all()
+    ]
+
+
+async def get_top_agent_runs(db: AsyncSession, limit: int = 10) -> list[dict]:
+    """Best finished AI-agent playthroughs, kept apart from the human leaderboard.
+
+    Only runs whose game reached the end count. The base URL is never exposed
+    (it may point at a private endpoint); the model name is.
+    """
+    result = await db.execute(
+        select(AgentRun.name, AgentRun.model, AgentRun.finished_at, User.username, User.name, Game.total_revenue)
+        .join(Game, Game.id == AgentRun.game_id)
+        .join(User, User.id == AgentRun.user_id)
+        .where(
+            AgentRun.status == AgentRunStatus.completed,
+            Game.status == GameStatus.completed,
+            Game.is_agent.is_(True),
+        )
+        .order_by(Game.total_revenue.desc(), AgentRun.finished_at.asc())
+        .limit(limit)
+    )
+    return [
+        {
+            "agent_name": agent_name, "model": model, "owner": username or owner_name or "Anonymous",
+            "profit": profit, "finished_at": finished_at,
+        }
+        for agent_name, model, finished_at, username, owner_name, profit in result.all()
     ]
 
 

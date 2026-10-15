@@ -57,6 +57,52 @@
         </div>
       </div>
 
+      <!-- AI agent runs: a separate ranking, so bots never push players out of the top 5 -->
+      <div class="text-center mt-12 mb-6 animate-fade-in">
+        <div class="text-4xl mb-2">🤖</div>
+        <h2 class="font-display text-2xl font-bold text-white mb-1">{{ t('leaderboard.agentsTitle') }}</h2>
+        <p class="text-slate-400 max-w-md mx-auto text-sm">{{ t('leaderboard.agentsSubtitle') }}</p>
+      </div>
+
+      <div class="glass rounded-2xl p-6 sm:p-8 w-full max-w-3xl animate-slide-up">
+        <div v-if="agentsLoading" class="text-center text-slate-400 py-8">
+          {{ t('leaderboard.loading') }}
+        </div>
+
+        <div v-else-if="agentsError" class="text-center text-red-400 py-8">
+          {{ t('leaderboard.error') }}
+        </div>
+
+        <div v-else-if="!agentRuns.length" class="text-center text-slate-400 py-8">
+          {{ t('leaderboard.agentsEmpty') }}
+        </div>
+
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead>
+              <tr class="text-xs uppercase tracking-wide text-slate-400 border-b border-white/10">
+                <th class="px-3 py-2 w-10">#</th>
+                <th class="px-3 py-2">{{ t('leaderboard.agent') }}</th>
+                <th class="px-3 py-2">{{ t('leaderboard.model') }}</th>
+                <th class="px-3 py-2">{{ t('leaderboard.owner') }}</th>
+                <th class="px-3 py-2 text-right">{{ t('leaderboard.profit') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(run, i) in agentRuns" :key="i" class="border-b border-white/5">
+                <td :class="['px-3 py-2.5 font-display font-bold', rankColor(i)]">{{ rankIcon(i) }}</td>
+                <td class="px-3 py-2.5 font-semibold text-white">{{ run.agent_name }}</td>
+                <td class="px-3 py-2.5">
+                  <span class="font-mono text-xs px-2 py-0.5 rounded bg-violet-500/15 text-violet-200 break-all">{{ run.model }}</span>
+                </td>
+                <td class="px-3 py-2.5 text-slate-400">{{ run.owner }}</td>
+                <td :class="['px-3 py-2.5 text-right font-mono font-bold whitespace-nowrap', run.profit < 0 ? 'text-red-400' : 'text-emerald-400']">{{ fmtRub(run.profit) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <button
         @click="$router.push('/')"
         class="mt-8 text-sm text-slate-400 hover:text-slate-200 transition-colors"
@@ -78,6 +124,9 @@ const { t } = useI18n()
 const entries = ref([])
 const loading = ref(true)
 const error = ref(false)
+const agentRuns = ref([])
+const agentsLoading = ref(true)
+const agentsError = ref(false)
 
 function fmtRub(n) {
   return Number(n || 0).toLocaleString('ru-RU') + ' ₽'
@@ -104,5 +153,20 @@ async function loadLeaderboard() {
   }
 }
 
-onMounted(loadLeaderboard)
+async function loadAgentLeaderboard() {
+  agentsLoading.value = true
+  agentsError.value = false
+  try {
+    agentRuns.value = (await leaderboardApi.agents()).data
+  } catch {
+    agentsError.value = true
+  } finally {
+    agentsLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadLeaderboard()
+  loadAgentLeaderboard()
+})
 </script>

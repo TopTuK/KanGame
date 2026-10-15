@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.schemas.leaderboard import LeaderboardEntry
+from app.schemas.leaderboard import AgentLeaderboardEntry, LeaderboardEntry
 from app.services import game_engine
 
 router = APIRouter()
@@ -11,3 +11,9 @@ router = APIRouter()
 @router.get("", response_model=list[LeaderboardEntry])
 async def get_leaderboard(db: AsyncSession = Depends(get_db)):
     return await game_engine.get_top_leaderboard(db)
+
+
+@router.get("/agents", response_model=list[AgentLeaderboardEntry])
+async def get_agent_leaderboard(db: AsyncSession = Depends(get_db)):
+    """Top finished AI-agent runs with the LLM model each one used."""
+    return await game_engine.get_top_agent_runs(db)
