@@ -19,17 +19,6 @@ async def anon_client(db_session):
         yield client
 
 
-class _FakeResponse:
-    def __init__(self, data):
-        self._data = data
-
-    def raise_for_status(self):
-        pass
-
-    def json(self):
-        return self._data
-
-
 async def _user_by_sub(db_session, sub):
     result = await db_session.execute(select(User).where(User.sub == sub))
     return result.scalar_one_or_none()
@@ -70,11 +59,13 @@ async def test_login_yandex_redirects_to_yandex(anon_client):
 @pytest.mark.asyncio
 async def test_yandex_callback_creates_prefixed_user(anon_client, db_session, monkeypatch):
     async def fake_token(request):
-        return {"access_token": "t", "token_type": "bearer"}
+        return {"access_token": "yandex-token", "token_type": "bearer"}
 
-    async def fake_get(url, **kwargs):
-        assert url == "info"
-        return _FakeResponse({
+    sent = []
+
+    def info_endpoint(request: httpx.Request):
+        sent.append(request)
+        return httpx.Response(200, json={
             "id": "12345",
             "login": "ivan",
             "real_name": "Ivan Petrov",
@@ -82,11 +73,17 @@ async def test_yandex_callback_creates_prefixed_user(anon_client, db_session, mo
         })
 
     monkeypatch.setattr(oauth.yandex, "authorize_access_token", fake_token)
-    monkeypatch.setattr(oauth.yandex, "get", fake_get)
+    # The real Authlib request goes through a mock transport, so the test sees the header actually sent.
+    monkeypatch.setitem(oauth.yandex.client_kwargs, "transport", httpx.MockTransport(info_endpoint))
 
     resp = await anon_client.get(settings.YandexCallbackUrl)
     assert resp.status_code == 303
     assert "kangame_session" in resp.cookies
+
+    assert len(sent) == 1
+    assert sent[0].url.copy_with(query=None) == "https://login.yandex.ru/info"
+    assert sent[0].url.params["format"] == "json"
+    assert sent[0].headers["Authorization"] == "OAuth yandex-token"
 
     user = await _user_by_sub(db_session, "yandex:12345")
     assert user is not None

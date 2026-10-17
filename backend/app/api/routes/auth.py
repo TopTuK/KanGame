@@ -73,7 +73,13 @@ async def signin_yandex(request: Request, db: AsyncSession = Depends(get_db)):
     if "yandex" not in enabled_providers():
         raise HTTPException(status_code=404, detail="Not found")
     token = await oauth.yandex.authorize_access_token(request)
-    resp = await oauth.yandex.get("info", params={"format": "json"}, token=token)
+    # Yandex documents the "OAuth" auth scheme, not Bearer, so send the header ourselves.
+    resp = await oauth.yandex.get(
+        "info",
+        params={"format": "json"},
+        headers={"Authorization": f"OAuth {token['access_token']}"},
+        withhold_token=True,
+    )
     resp.raise_for_status()
     info = resp.json()
 
