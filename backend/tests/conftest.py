@@ -11,6 +11,10 @@ os.environ.setdefault("AuthClientSecret", "test-secret")
 os.environ.setdefault("AuthAuthority", "https://auth.invalid")
 os.environ.setdefault("AuthCallbackUrl", "/auth/signin-oidc")
 os.environ.setdefault("SESSION_SECRET_KEY", "test-session-secret")
+os.environ.setdefault("YandexClientId", "test-yandex-client")
+os.environ.setdefault("YandexClientSecret", "test-yandex-secret")
+os.environ.setdefault("GoogleClientId", "test-google-client")
+os.environ.setdefault("GoogleClientSecret", "test-google-secret")
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://kanban:kanban@localhost:5432/kanban_test",

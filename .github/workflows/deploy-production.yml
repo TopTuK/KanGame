@@ -104,6 +104,11 @@ jobs:
             echo "BASE_URL=${{ secrets.BASE_URL }}"
             echo "SESSION_SECRET_KEY=${{ secrets.SESSION_SECRET_KEY }}"
             echo "AGENT_DEFAULT_API_KEY=${{ secrets.AGENT_DEFAULT_API_KEY }}"
+            # Optional social sign-in: an empty client id hides that provider.
+            echo "YandexClientId=${{ secrets.YandexClientId }}"
+            echo "YandexClientSecret=${{ secrets.YandexClientSecret }}"
+            echo "GoogleClientId=${{ secrets.GoogleClientId }}"
+            echo "GoogleClientSecret=${{ secrets.GoogleClientSecret }}"
           } > ${{ env.ENV_FILE_PATH }}
           chmod 600 ${{ env.ENV_FILE_PATH }}
 

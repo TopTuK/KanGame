@@ -120,6 +120,22 @@
         <button @click="signIn" class="w-full btn-primary text-lg py-3 rounded-xl">
           {{ t('home.signIn') }}
         </button>
+        <a
+          v-if="providers.includes('yandex')"
+          href="/auth/login/yandex"
+          class="flex items-center justify-center gap-2 w-full btn-secondary py-2.5 rounded-xl mt-3"
+        >
+          <span class="w-5 h-5 rounded-full bg-[#FC3F1D] text-white text-xs font-bold flex items-center justify-center">Я</span>
+          {{ t('home.signInYandex') }}
+        </a>
+        <a
+          v-if="providers.includes('google')"
+          href="/auth/login/google"
+          class="flex items-center justify-center gap-2 w-full btn-secondary py-2.5 rounded-xl mt-3"
+        >
+          <span class="w-5 h-5 rounded-full bg-white text-[#4285F4] text-xs font-bold flex items-center justify-center">G</span>
+          {{ t('home.signInGoogle') }}
+        </a>
         <router-link to="/demo" class="block w-full mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors">
           {{ t('home.tryDemo') }}
         </router-link>
@@ -211,7 +227,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { agentApi, gamesApi } from '../services/api.js'
+import { agentApi, authApi, gamesApi } from '../services/api.js'
 import { useGameContent } from '../composables/useGameContent.js'
 import { useAuthStore } from '../stores/authStore.js'
 import { useIsMobileOrTablet } from '../composables/useIsMobileOrTablet.js'
@@ -243,6 +259,15 @@ const savingUsername = ref(false)
 
 function signIn() {
   window.location.href = '/auth/login'
+}
+
+// Optional social sign-in buttons (Yandex, Google) are shown only when configured on the server.
+const providers = ref([])
+
+async function loadProviders() {
+  try {
+    providers.value = (await authApi.providers()).data.providers
+  } catch {}
 }
 
 async function loadGames() {
@@ -311,6 +336,8 @@ watch(
     if (checked && authStore.isAuthenticated) {
       loadGames()
       loadActiveRun()
+    } else if (checked) {
+      loadProviders()
     }
   },
   { immediate: true }
