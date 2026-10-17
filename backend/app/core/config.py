@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     SESSION_SECRET_KEY: str
     SESSION_COOKIE_SECURE: bool = False
 
+    # Optional social sign-in. A provider is offered only when its client id is
+    # set; the redirect URI registered with it is BASE_URL + its callback path.
+    YandexClientId: str = ""
+    YandexClientSecret: str = ""
+    YandexCallbackUrl: str = "/auth/signin-yandex"
+    GoogleClientId: str = ""
+    GoogleClientSecret: str = ""
+    GoogleCallbackUrl: str = "/auth/signing-google"
+
     # Only for e2e tests: enables POST /api/dev/test-login to bypass OIDC.
     # Must stay false outside of test environments.
     ENABLE_TEST_LOGIN: bool = False

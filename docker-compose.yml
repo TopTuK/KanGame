@@ -24,6 +24,12 @@ services:
       BASE_URL: ${BASE_URL:-http://localhost}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      YandexClientId: ${YandexClientId:-}
+      YandexClientSecret: ${YandexClientSecret:-}
+      YandexCallbackUrl: ${YandexCallbackUrl:-/auth/signin-yandex}
+      GoogleClientId: ${GoogleClientId:-}
+      GoogleClientSecret: ${GoogleClientSecret:-}
+      GoogleCallbackUrl: ${GoogleCallbackUrl:-/auth/signing-google}
       AGENT_DEFAULT_BASE_URL: ${AGENT_DEFAULT_BASE_URL:-https://routerai.ru/api/v1}
       AGENT_DEFAULT_MODEL: ${AGENT_DEFAULT_MODEL:-openai/gpt-4.1-nano}
       AGENT_DEFAULT_API_KEY: ${AGENT_DEFAULT_API_KEY:-}

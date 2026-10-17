@@ -80,7 +80,7 @@ The UI never encodes game rules. It renders server state and sends player action
 | Layer | Responsibility |
 |-------|----------------|
 | **API routes** (`api/routes/games.py`) | HTTP endpoints, validation, error handling — every route requires a signed-in user and is scoped to their own games |
-| **Auth routes** (`api/routes/auth.py`) | OIDC login redirect, provider callback, current-user lookup, logout |
+| **Auth routes** (`api/routes/auth.py`) | OIDC, Yandex and Google login redirects and callbacks, provider list, current-user lookup, logout |
 | **Leaderboard route** (`api/routes/leaderboard.py`) | Public, unauthenticated endpoint — no route dependency requires a session |
 | **Rules route** (`api/routes/rules.py`) | Public `GET /api/rules`: productivity ranges, WIP limits, roster, card catalog and rank thresholds, built from the engine constants by `services/rules.py` |
 | **Demo route** (`api/routes/demo.py`) | Public, unauthenticated endpoints for demo games — no `GET`, so a demo can never be re-fetched or resumed (see [🎬 Demo Mode](#-demo-mode)) |
@@ -88,7 +88,7 @@ The UI never encodes game rules. It renders server state and sends player action
 | **Game engine** (`services/game_engine.py`) | All Kanban rules: pull, WIP, worker assignment, work rolls, revenue, events; every game lookup is filtered by owner. Also computes the leaderboard (best completed-game revenue per user, excluding demo games) and creates/purges demo games |
 | **Data definitions** (`data/cards.py`) | Static card deck and daily event catalog |
 | **Models** (`models/game.py`, `models/user.py`) | SQLAlchemy ORM entities — `Game.is_demo` flags demo games |
-| **Core** (`core/`) | Config, async DB session factory, OIDC client (`oauth.py`), `get_current_user` dependency (`auth.py`) |
+| **Core** (`core/`) | Config, async DB session factory, OIDC / Yandex / Google OAuth clients (`oauth.py`), `get_current_user` dependency (`auth.py`) |
 
 ### 🔐 Authentication
 
@@ -100,6 +100,27 @@ KanGame uses a **backend-driven OIDC Authorization Code flow** (via [Authlib](ht
 4. `GET /api/auth/me` reports the current user to the frontend; `POST /api/auth/logout` clears the session.
 
 Configure the provider in `.env` (see Quick Start and Local Development below) — `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl`, plus `SESSION_SECRET_KEY` and `BASE_URL`.
+
+#### Yandex and Google sign-in
+
+Users can also sign in with **Yandex ID** or **Google**, through the same backend-driven Authorization Code flow:
+
+1. The home page asks `GET /api/auth/providers` which providers are configured and shows a **Sign in with Yandex** / **Sign in with Google** button for each.
+2. A button goes to `GET /auth/login/yandex` or `GET /auth/login/google`, which redirects to the provider (Yandex: plain OAuth 2.0 with scopes `login:info login:email`; Google: OIDC with `openid email profile`).
+3. The provider redirects back to the callback (`/auth/signin-yandex` or `/auth/signing-google`). The backend exchanges the code, reads the profile (Yandex from `https://login.yandex.ru/info`, Google from the ID token) and signs the user in exactly like OIDC.
+
+Users from these providers are stored with a prefixed `sub` (`yandex:<id>`, `google:<sub>`), so they never collide with organization OIDC users. Accounts are **not** merged by email: signing in through different providers gives different KanGame users.
+
+Both providers are optional — a provider is offered only when its client id is set:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `YandexClientId`, `YandexClientSecret` | empty | Yandex OAuth app credentials ([oauth.yandex.ru](https://oauth.yandex.ru)) |
+| `YandexCallbackUrl` | `/auth/signin-yandex` | Callback path |
+| `GoogleClientId`, `GoogleClientSecret` | empty | Google OAuth client ([Google Cloud Console](https://console.cloud.google.com/apis/credentials) → Credentials → OAuth client ID, type *Web application*) |
+| `GoogleCallbackUrl` | `/auth/signing-google` | Callback path |
+
+Register `BASE_URL` + callback path as the redirect URI with each provider — in production `https://kangame.pmi.moscow/auth/signin-yandex` and `https://kangame.pmi.moscow/auth/signing-google`; for local development also add `http://localhost/auth/signin-yandex` and `http://localhost/auth/signing-google`. In production the credentials come from the `YandexClientId`, `YandexClientSecret`, `GoogleClientId` and `GoogleClientSecret` GitHub secrets.
 
 A separate, **test-only** login path (`POST /api/dev/test-login`) bypasses OIDC entirely; it 404s unless `ENABLE_TEST_LOGIN=true` and exists solely so the e2e suite can authenticate without a real identity provider — see [🧪 Testing](#-testing).
 
@@ -167,7 +188,7 @@ PostgreSQL stores the full game snapshot:
 
 | Entity | Purpose |
 |--------|---------|
-| `User` | OIDC identity (`sub`, email, name) — owns games; a single system row also owns all demo games |
+| `User` | Sign-in identity (`sub` — the OIDC subject, or `yandex:…` / `google:…`; email, name) — owns games; a single system row also owns all demo games |
 | `Game` | Session metadata, day/phase, team config, WIP limits, revenue; belongs to a `User`; `is_demo` flags demo games (excluded from the leaderboard, purged daily) |
 | `Card` | Work items with story points, column, type, due dates; `stage_days` records the first day each card reached every pipeline stage, feeding the analytics diagrams |
 | `GameEvent` | Daily event cards and resolution state |
@@ -210,7 +231,7 @@ User clicks Start Work
 |-------|--------------|
 | 🎨 Frontend | Vue 3, Vite, Pinia, Vue Router, vue-i18n, Tailwind CSS, Chart.js / vue-chartjs |
 | 🐍 Backend | Python 3.12, FastAPI, SQLAlchemy (async), Pydantic |
-| 🔐 Auth | Authlib (OIDC client), Starlette `SessionMiddleware` (signed session cookies) |
+| 🔐 Auth | Authlib (OIDC, Yandex ID and Google clients), Starlette `SessionMiddleware` (signed session cookies) |
 | 🗄️ Database | PostgreSQL 16 |
 | 🐳 Infra | Docker Compose, Nginx |
 | 🧪 Testing | pytest (backend business logic), Vitest (frontend business logic), Playwright (e2e), GitHub Actions (CI) |
@@ -228,7 +249,7 @@ KanGame2/
 │   ├── tests/            # pytest suite for the game engine (unit + Postgres-backed integration)
 │   └── app/
 │       ├── api/routes/   # REST routes (games.py, auth.py, leaderboard.py, demo.py, agent.py, rules.py)
-│       ├── core/         # Config, database, OIDC client (oauth.py), get_current_user (auth.py)
+│       ├── core/         # Config, database, OIDC/Yandex/Google clients (oauth.py), get_current_user (auth.py)
 │       ├── data/         # Card and event definitions, rank thresholds
 │       ├── models/       # SQLAlchemy models (game.py, user.py)
 │       ├── schemas/      # Pydantic DTOs (game.py, user.py, leaderboard.py)
@@ -258,7 +279,7 @@ KanGame2/
 
 **Prerequisites:** [Docker](https://docs.docker.com/get-docker/), Docker Compose, and OpenSSL
 
-1. Create `.env` in the repo root (copy `.env.example`) with your OIDC provider's `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl=/auth/signin-oidc`, a random `SESSION_SECRET_KEY` (e.g. `openssl rand -hex 32`), and `BASE_URL` (default `http://localhost` works for local dev). Register `http://localhost/auth/signin-oidc` as the redirect URI with your OIDC provider.
+1. Create `.env` in the repo root (copy `.env.example`) with your OIDC provider's `AuthClientId`, `AuthClientSecret`, `AuthAuthority`, `AuthCallbackUrl=/auth/signin-oidc`, a random `SESSION_SECRET_KEY` (e.g. `openssl rand -hex 32`), and `BASE_URL` (default `http://localhost` works for local dev). Register `http://localhost/auth/signin-oidc` as the redirect URI with your OIDC provider. Optionally add `YandexClientId`/`YandexClientSecret` and `GoogleClientId`/`GoogleClientSecret` to enable Yandex and Google sign-in (see [Yandex and Google sign-in](#yandex-and-google-sign-in)).
 2. Start the stack:
    ```bash
    docker compose up --build
@@ -330,6 +351,11 @@ AuthCallbackUrl=/auth/signin-oidc
 SESSION_SECRET_KEY=...
 BASE_URL=http://localhost
 SESSION_COOKIE_SECURE=false
+# Optional: Yandex and Google sign-in
+YandexClientId=...
+YandexClientSecret=...
+GoogleClientId=...
+GoogleClientSecret=...
 ```
 
 Start the API:
@@ -581,6 +607,10 @@ All `/api/games*` routes require a signed-in session and only operate on games o
 |--------|----------|-------------|
 | `GET` | `/auth/login` | Redirect to the OIDC provider's authorize endpoint |
 | `GET` | `/auth/signin-oidc` | OIDC provider callback — exchanges the code, establishes the session |
+| `GET` | `/auth/login/{provider}` | Redirect to Yandex (`yandex`) or Google (`google`) sign-in; 404 if that provider isn't configured |
+| `GET` | `/auth/signin-yandex` | Yandex ID callback (path set by `YandexCallbackUrl`) |
+| `GET` | `/auth/signing-google` | Google callback (path set by `GoogleCallbackUrl`) |
+| `GET` | `/api/auth/providers` | **Public, no auth required.** Configured sign-in providers, e.g. `{"providers": ["oidc", "yandex", "google"]}` |
 | `GET` | `/api/auth/me` | Current authenticated user (401 if not signed in) |
 | `POST` | `/api/auth/logout` | Clear the session |
 | `POST` | `/api/dev/test-login` | **Test-only.** Disabled by default (404) unless `ENABLE_TEST_LOGIN=true`; bypasses OIDC for e2e tests — see [🧪 Testing](#-testing) |

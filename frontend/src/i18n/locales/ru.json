@@ -23,6 +23,8 @@
     "footer": "На основе getKanban® — настольной Lean/Agile симуляции",
     "signOut": "Выйти",
     "signIn": "Войти",
+    "signInYandex": "Войти через Яндекс",
+    "signInGoogle": "Войти через Google",
     "signInPrompt": "Войдите, чтобы играть",
     "signInPromptDesc": "Для начала или продолжения игры необходимо войти в систему.",
     "tryDemo": "Или попробуйте демо-версию",
